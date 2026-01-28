@@ -536,6 +536,10 @@ add_clang_tool(insights
     OutputFormatHelper.cpp
 )
 
+if(DEFINED LLVM_ENABLE_RTTI AND NOT LLVM_ENABLE_RTTI)
+    target_compile_options(insights PRIVATE -fno-rtti)
+endif()
+
 if(IS_MSVC_CL)
     # TODO figure out what llvm-config reports and use this configuration
     set_property(TARGET insights PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
