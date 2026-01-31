@@ -18,6 +18,7 @@
 #include "InsightsOnce.h"
 #include "InsightsStrCat.h"
 #include "NumberIterator.h"
+#include "clang/AST/DeclTemplate.h"
 #include "clang/AST/RecordLayout.h"
 #include "clang/AST/StmtCXX.h"
 #include "clang/Basic/OperatorKinds.h"
@@ -2133,12 +2134,12 @@ void CodeGenerator::InsertArg(const PackIndexingExpr* stmt)
 void CodeGenerator::InsertArg(const CXXReflectExpr* stmt)
 {
     mOutputFormatHelper.Append("^^");
-    
+
     if(stmt->hasDependentSubExpr()) {
         InsertArg(stmt->getDependentSubExpr());
     } else {
         const auto& reflection = stmt->getReflection();
-        
+
         switch(reflection.getReflectionKind()) {
             case ReflectionKind::Type: {
                 mOutputFormatHelper.Append(GetName(reflection.getReflectedType()));
@@ -2158,9 +2159,7 @@ void CodeGenerator::InsertArg(const CXXReflectExpr* stmt)
                 }
                 break;
             }
-            default:
-                mOutputFormatHelper.Append("/* reflection */");
-                break;
+            default: mOutputFormatHelper.Append("/* reflection */"); break;
         }
     }
 }
@@ -2178,29 +2177,32 @@ void CodeGenerator::InsertArg(const CXXIterableExpansionStmt* stmt)
 {
     // Output: template for (var : range) { body }
     mOutputFormatHelper.Append("template for(");
-    
-    // Expansion variable 
+
+    // Expansion variable
     if(const auto* varDecl = stmt->getExpansionVariable()) {
         mOutputFormatHelper.Append("constexpr auto ");
         if(auto name = varDecl->getNameAsString(); !name.empty()) {
             mOutputFormatHelper.Append(name);
         }
     }
-    
+
     mOutputFormatHelper.Append(" : ");
-    
+
     // The range being iterated
     if(const auto* tparamRef = stmt->getTParamRef()) {
         InsertArg(tparamRef);
     }
-    
+
     mOutputFormatHelper.Append(")");
     mOutputFormatHelper.AppendNewLine();
-    
+
     // Body of the expansion
     if(const auto* body = stmt->getBody()) {
         InsertArg(body);
+        mOutputFormatHelper.AppendNewLine();
     }
+
+    InsertExpansionInstantiations(stmt, stmt->getNumInstantiations());
 }
 //-----------------------------------------------------------------------------
 
@@ -2219,7 +2221,10 @@ void CodeGenerator::InsertArg(const CXXIndeterminateExpansionStmt* stmt)
     mOutputFormatHelper.AppendNewLine();
     if(const auto* body = stmt->getBody()) {
         InsertArg(body);
+        mOutputFormatHelper.AppendNewLine();
     }
+
+    InsertExpansionInstantiations(stmt, stmt->getNumInstantiations());
 }
 //-----------------------------------------------------------------------------
 
@@ -2238,7 +2243,10 @@ void CodeGenerator::InsertArg(const CXXDestructurableExpansionStmt* stmt)
     mOutputFormatHelper.AppendNewLine();
     if(const auto* body = stmt->getBody()) {
         InsertArg(body);
+        mOutputFormatHelper.AppendNewLine();
     }
+
+    InsertExpansionInstantiations(stmt, stmt->getNumInstantiations());
 }
 //-----------------------------------------------------------------------------
 
@@ -2257,7 +2265,10 @@ void CodeGenerator::InsertArg(const CXXInitListExpansionStmt* stmt)
     mOutputFormatHelper.AppendNewLine();
     if(const auto* body = stmt->getBody()) {
         InsertArg(body);
+        mOutputFormatHelper.AppendNewLine();
     }
+
+    InsertExpansionInstantiations(stmt, stmt->getNumInstantiations());
 }
 //-----------------------------------------------------------------------------
 
@@ -2631,6 +2642,49 @@ static bool IsStmtRequiringSemi(const Stmt* stmt)
 }
 //-----------------------------------------------------------------------------
 
+void CodeGenerator::InsertExpansionInstantiations(const CXXExpansionStmt* stmt, const unsigned numInstantiations)
+{
+    if((nullptr == stmt) or (0U == numInstantiations)) {
+        return;
+    }
+
+    for(unsigned idx = 0; idx < numInstantiations; ++idx) {
+        const auto* instantiation = stmt->getInstantiation(idx);
+        if(nullptr == instantiation) {
+            continue;
+        }
+
+        mOutputFormatHelper.InsertIfDefTemplateGuard();
+
+        InsertArg(instantiation);
+
+        const bool skipSemiForLambda{mLambdaStack.empty() and isa<LambdaExpr>(instantiation)};
+        const bool needsSemi{IsStmtRequiringSemi<IfStmt,
+                                                 NullStmt,
+                                                 ForStmt,
+                                                 DeclStmt,
+                                                 WhileStmt,
+                                                 DoStmt,
+                                                 CXXForRangeStmt,
+                                                 SwitchStmt,
+                                                 CXXTryStmt,
+                                                 CppInsightsCommentStmt,
+                                                 CompoundStmt>(instantiation) and
+                             InsertSemi() and not skipSemiForLambda and not mSkipSemi};
+
+        if(needsSemi) {
+            mOutputFormatHelper.AppendSemiNewLine();
+        } else {
+            mOutputFormatHelper.AppendNewLine();
+        }
+
+        mSkipSemi = false;
+
+        mOutputFormatHelper.InsertEndIfTemplateGuard();
+    }
+}
+//-----------------------------------------------------------------------------
+
 void CodeGenerator::HandleCompoundStmt(const CompoundStmt* stmt)
 {
     for(const auto* item : stmt->body()) {
@@ -2872,8 +2926,8 @@ void CodeGenerator::InsertArg(const CStyleCastExpr* stmt)
 
 void CodeGenerator::InsertArg(const CXXNewExpr* stmt)
 {
-    const auto  noEmptyInitList = mNoEmptyInitList;
-    auto resetNoEmptyInitList = [&] { mNoEmptyInitList = noEmptyInitList; };
+    const auto                                  noEmptyInitList      = mNoEmptyInitList;
+    auto                                        resetNoEmptyInitList = [&] { mNoEmptyInitList = noEmptyInitList; };
     FinalAction<decltype(resetNoEmptyInitList)> _{std::move(resetNoEmptyInitList)};
     mNoEmptyInitList = GetInsightsOptions().UseShow2C ? NoEmptyInitList::Yes : NoEmptyInitList::No;
 
@@ -3186,9 +3240,7 @@ std::string CodeGenerator::GetValueOfValueInit(const QualType& t)
                     }
                 }
                 break;
-            case Type::STK_Reflection: return "{}";
-
-                break;
+            case Type::STK_Reflection: return "{}"; break;
 
             case Type::STK_FloatingComplex:
             case Type::STK_IntegralComplex:
@@ -3903,6 +3955,14 @@ void CodeGenerator::InsertArg(const TypeAliasTemplateDecl* stmt)
 }
 //-----------------------------------------------------------------------------
 
+void CodeGenerator::InsertArg(const ExpansionStmtDecl* stmt)
+{
+    if(const auto* expansion = stmt->getStmt()) {
+        InsertArg(expansion);
+    }
+}
+//-----------------------------------------------------------------------------
+
 void CodeGenerator::InsertArg(const AttributedStmt* stmt)
 {
     for(const auto& attr : stmt->getAttrs()) {
@@ -4253,8 +4313,7 @@ void CodeGenerator::InsertArg(const CXXRecordDecl* stmt)
                     ofmLambdaInCtor.SetIndent(indentAtInsertPosBeforeClass);
                     CodeGenerator cgLambdaInCtor{ofmLambdaInCtor, LambdaInInitCapture::Yes};
 
-                          if(P0315Visitor<CodeGenerator> dt{cgLambdaInCtor};
-                              dt.TraverseStmt(const_cast<Expr*>(expr))) {
+                    if(P0315Visitor<CodeGenerator> dt{cgLambdaInCtor}; dt.TraverseStmt(const_cast<Expr*>(expr))) {
 
                         OutputFormatHelper   ofm{};
                         CodeGeneratorVariant codeGenerator{ofm, mLambdaStack, mProcessingPrimaryTemplate};
@@ -4494,8 +4553,8 @@ void CodeGenerator::InsertArg(const RequiresExpr* stmt)
 
     mOutputFormatHelper.OpenScope();
 
-    const auto  noEmptyInitList = mNoEmptyInitList;
-    auto resetNoEmptyInitList = [&] { mNoEmptyInitList = noEmptyInitList; };
+    const auto                                  noEmptyInitList      = mNoEmptyInitList;
+    auto                                        resetNoEmptyInitList = [&] { mNoEmptyInitList = noEmptyInitList; };
     FinalAction<decltype(resetNoEmptyInitList)> _{std::move(resetNoEmptyInitList)};
     mNoEmptyInitList = NoEmptyInitList::Yes;
 
@@ -4669,9 +4728,9 @@ void CodeGenerator::InsertArg(const Stmt* stmt)
 
     // Debug: print ALL class names to see what we're dealing with
     if(stmt->getStmtClassName()) {
-        std::string_view className = stmt->getStmtClassName();
-        static int debugCount = 0;
-        if(debugCount++ < 50) { // Limit output
+        std::string_view className  = stmt->getStmtClassName();
+        static int       debugCount = 0;
+        if(debugCount++ < 50) {  // Limit output
             llvm::errs() << "STMT CLASS: [" << className << "]\n";
         }
     }

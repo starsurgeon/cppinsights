@@ -45,6 +45,7 @@ SUPPORTED_DECL(ClassTemplateDecl)
 SUPPORTED_DECL(NamespaceDecl)
 SUPPORTED_DECL(VarTemplateDecl)
 SUPPORTED_DECL(ConceptDecl)
+SUPPORTED_DECL(ExpansionStmtDecl)
 SUPPORTED_DECL(UnresolvedUsingValueDecl)
 SUPPORTED_DECL(LinkageSpecDecl)
 
