@@ -2169,7 +2169,15 @@ void CodeGenerator::InsertArg(const CXXReflectExpr* stmt)
 void CodeGenerator::InsertArg(const CXXSpliceExpr* stmt)
 {
     mOutputFormatHelper.Append("[:");
-    InsertArg(stmt->getSplice()->getOperand());
+    if(const auto* splice = stmt->getSplice()) {
+        if(const auto* operand = splice->getOperand()) {
+            InsertArg(operand);
+        } else {
+            mOutputFormatHelper.Append("/* splice */");
+        }
+    } else {
+        mOutputFormatHelper.Append("/* splice */");
+    }
     mOutputFormatHelper.Append(":]");
 }
 //-----------------------------------------------------------------------------
