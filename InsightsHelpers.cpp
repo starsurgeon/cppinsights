@@ -13,6 +13,7 @@
 #include "Insights.h"
 #include "InsightsStaticStrings.h"
 #include "OutputFormatHelper.h"
+#include "clang/Basic/OperatorKinds.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Sema/Lookup.h"
 //-----------------------------------------------------------------------------
@@ -133,7 +134,7 @@ struct CppInsightsPrintingPolicy : PrintingPolicy
         Alignof                = true;
         ConstantsAsWritten     = true;
         AnonymousTagLocations  = false;  // does remove filename and line for from lambdas in parameters
-        PrintCanonicalTypes    = InsightsCanonicalTypes::Yes == insightsCanonicalTypes;
+        PrintAsCanonical       = InsightsCanonicalTypes::Yes == insightsCanonicalTypes;
 
         CppInsightsUnqualified   = (Unqualified::Yes == unqualified);
         CppInsightsSuppressScope = supressScope;
@@ -163,7 +164,7 @@ BuildNamespace(std::string& fullNamespace, const NestedNameSpecifier* stmt, cons
     RETURN_IF(not stmt);
 
     if(const auto* prefix = stmt->getPrefix();
-       prefix and not((NestedNameSpecifier::TypeSpecWithTemplate == stmt->getKind()) and
+       prefix and not((NestedNameSpecifier::TypeSpec == stmt->getKind()) and
                       isa<DependentTemplateSpecializationType>(stmt->getAsType()))) {
         BuildNamespace(fullNamespace, prefix, ignoreNamespace);
     }
@@ -179,14 +180,10 @@ BuildNamespace(std::string& fullNamespace, const NestedNameSpecifier* stmt, cons
 
         case NestedNameSpecifier::NamespaceAlias: fullNamespace.append(stmt->getAsNamespaceAlias()->getName()); break;
 
-        case NestedNameSpecifier::TypeSpecWithTemplate:
+        case NestedNameSpecifier::TypeSpec:
             if(auto* dependentSpecType = stmt->getAsType()->getAs<DependentTemplateSpecializationType>()) {
                 fullNamespace.append(GetElaboratedTypeKeyword(dependentSpecType->getKeyword()));
             }
-
-            [[fallthrough]];
-
-        case NestedNameSpecifier::TypeSpec:
             fullNamespace.append(GetUnqualifiedScopelessName(stmt->getAsType(), InsightsSuppressScope::Yes));
             // The template parameters are already contained in the type we inserted above.
             break;
@@ -564,10 +561,18 @@ private:
 
     bool HandleType(const DependentTemplateSpecializationType* type)
     {
+        const auto& depName   = type->getDependentTemplateName();
+        const auto* qualifier = depName.getQualifier();
+        const auto  name      = depName.getName();
+        const auto* ident     = name.getIdentifier();
+        const auto  nameText  = ident
+                                    ? ident->getName()
+                                    : getOperatorSpelling(name.getOperator());
+
         mData.Append(GetElaboratedTypeKeyword(type->getKeyword()),
-                     GetNestedName(type->getQualifier()),
+                     GetNestedName(qualifier),
                      kwTemplateSpace,
-                     type->getIdentifier()->getName());
+                     nameText);
 
         CodeGenerator codeGenerator{mData};
         codeGenerator.InsertTemplateArgs(*type);
@@ -625,7 +630,18 @@ private:
 
         mData.Append('(');
 
-        const bool ret = HandleType(type->getClass());
+        const Type* classType = nullptr;
+        if(const auto* qualifier = type->getQualifier()) {
+            classType = qualifier->getAsType();
+        }
+
+        if(nullptr == classType) {
+            if(const auto* recordDecl = type->getMostRecentCXXRecordDecl()) {
+                classType = recordDecl->getTypeForDecl();
+            }
+        }
+
+        const bool ret = (nullptr != classType) ? HandleType(classType) : false;
 
         mData.Append("::*)"sv);
 
@@ -742,7 +758,7 @@ private:
         }
 
         if(not isa_and_nonnull<DeclRefExpr>(type->getUnderlyingExpr())) {
-            P0315Visitor visitor{mData};
+            P0315Visitor<OutputFormatHelper> visitor{mData};
 
             return not visitor.TraverseStmt(type->getUnderlyingExpr());
         }
@@ -887,7 +903,7 @@ static bool HasOverload(const FunctionDecl* fd)
     LookupResult result{sema, ncfd->getDeclName(), {}, Sema::LookupOrdinaryName};
 
     if(sema.LookupName(result, sema.getScopeForContext(ncfd->getDeclContext()))) {
-        return LookupResult::FoundOverloaded == result.getResultKind();
+        return LookupResultKind::FoundOverloaded == result.getResultKind();
     }
 
     return false;
@@ -1012,7 +1028,7 @@ static const SubstTemplateTypeParmType* GetSubstTemplateTypeParmType(const Type*
 static const DeclRefExpr* FindVarDeclRef(const Stmt* stmt)
 {
     if(const auto* dref = dyn_cast_or_null<DeclRefExpr>(stmt)) {
-        if(const auto* vd = dyn_cast_or_null<VarDecl>(dref->getDecl())) {
+        if(isa<VarDecl>(dref->getDecl())) {
             return dref;
         }
     }
@@ -1421,7 +1437,7 @@ std::string GetName(const DeclRefExpr& declRefExpr)
         // cast
         if(IsTrivialStaticClassVarDecl(declRefExpr)) {
             if(const VarDecl* vd = GetVarDeclFromDeclRefExpr(declRefExpr)) {
-                if(const auto* cxxRecordDecl = vd->getType()->getAsCXXRecordDecl()) {
+                if(vd->getType()->getAsCXXRecordDecl()) {
                     plainName = StrCat("*"sv,
                                        kwReinterpretCast,
                                        "<"sv,
@@ -1455,7 +1471,7 @@ const DeclRefExpr* FindDeclRef(const Stmt* stmt)
         if(const auto* arrayDeclRefExpr = dyn_cast_or_null<DeclRefExpr>(srcExpr)) {
             return arrayDeclRefExpr;
         }
-    } else if(const auto func = dyn_cast_or_null<CXXFunctionalCastExpr>(stmt)) {
+    } else if(isa<CXXFunctionalCastExpr>(stmt)) {
         //        TODO(stmt, "");
     }
 

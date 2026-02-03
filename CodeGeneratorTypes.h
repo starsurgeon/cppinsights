@@ -45,6 +45,7 @@ SUPPORTED_DECL(ClassTemplateDecl)
 SUPPORTED_DECL(NamespaceDecl)
 SUPPORTED_DECL(VarTemplateDecl)
 SUPPORTED_DECL(ConceptDecl)
+SUPPORTED_DECL(ExpansionStmtDecl)
 SUPPORTED_DECL(UnresolvedUsingValueDecl)
 SUPPORTED_DECL(LinkageSpecDecl)
 
@@ -137,6 +138,12 @@ SUPPORTED_STMT(CXXParenListInitExpr)
 SUPPORTED_STMT(CppInsightsCommentStmt)
 SUPPORTED_STMT(CXXPseudoDestructorExpr)
 SUPPORTED_STMT(PackIndexingExpr)
+SUPPORTED_STMT(CXXReflectExpr)
+SUPPORTED_STMT(CXXSpliceExpr)
+SUPPORTED_STMT(CXXIterableExpansionStmt)
+SUPPORTED_STMT(CXXIndeterminateExpansionStmt)
+SUPPORTED_STMT(CXXDestructurableExpansionStmt)
+SUPPORTED_STMT(CXXInitListExpansionStmt)
 
 #undef IGNORED_DECL
 #undef IGNORED_STMT

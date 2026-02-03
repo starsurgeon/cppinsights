@@ -22,6 +22,11 @@
 #include "StackList.h"
 //-----------------------------------------------------------------------------
 
+namespace clang {
+class ExpansionStmtDecl;
+class CXXExpansionStmt;
+}  // namespace clang
+
 namespace clang::insights {
 
 void PushVtableEntry(const CXXRecordDecl*, const CXXRecordDecl*, VarDecl* decl);
@@ -369,6 +374,8 @@ protected:
     void InsertCurlysIfRequired(const Stmt* stmt);
 
     void InsertIfOrSwitchInitVariables(same_as_any_of<const IfStmt, const SwitchStmt> auto* stmt);
+
+    void InsertExpansionInstantiations(const CXXExpansionStmt* stmt, unsigned numInstantiations);
 
     void InsertInstantiationPoint(const SourceManager& sm, const SourceLocation& instLoc, std::string_view text = {});
 

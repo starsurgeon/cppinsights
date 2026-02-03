@@ -158,6 +158,24 @@ cmake -G Ninja -D=CMAKE_BUILD_TYPE=Release -DLLVM_EXTERNAL_PROJECTS=cppinsights 
 ninja
 ```
 
+``` 
+mkdir clang-p2996
+git clone https://github.com/bloomberg/clang-p2996.git clang-p2996
+mkdir cppinsights
+# Use the reflection-enabled fork of cppinsights instead of the upstream https://github.com/andreasfertig/cppinsights.git
+git clone https://github.com/starsurgeon/cppinsights.git
+git checkout reflection
+
+mkdir build
+cd build
+export CC=clang
+export CXX=clang++
+
+cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DLLVM_ENABLE_PROJECTS="clang" -DLLVM_EXTERNAL_PROJECTS=cppinsights -DLLVM_EXTERNAL_CPPINSIGHTS_SOURCE_DIR=/opt/cppinsights/cppinsights ../clang-p2996/llvm
+
+ninja
+```
+
 
 
 ### cmake options

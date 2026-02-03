@@ -385,7 +385,7 @@ FunctionBase(std::string_view name, QualType returnType, const params_vector& pa
         false,
         false,
         ConstexprSpecKind::Unspecified,
-        nullptr);
+        {});
     fdd->setImplicit(true);
 
     SmallVector<ParmVarDecl*, 8> paramVarDecls{};
@@ -690,12 +690,13 @@ QualType GetRecordDeclType(const RecordDecl* rd)
 CXXNewExpr* New(ArrayRef<Expr*> placementArgs, const Expr* expr, QualType t)
 {
     auto& ctx = GetGlobalAST();
+    ImplicitAllocationParameters iap{t, TypeAwareAllocationMode::No, AlignedAllocationMode::No};
 
     return CXXNewExpr::Create(ctx,
                               false,
                               nullptr,
                               nullptr,
-                              true,
+                              iap,
                               false,
                               placementArgs,
                               SourceRange{},
