@@ -1,0 +1,134 @@
+void iterable()
+{
+  constexpr const int arr[3] = {1, 2, 3};
+  template for(constexpr auto x : __N)
+  {
+    int y = x;
+  }
+  #ifdef INSIGHTS_USE_TEMPLATE
+  {
+    {
+      int y = x;
+    };
+  }
+  #endif
+  #ifdef INSIGHTS_USE_TEMPLATE
+  {
+    {
+      int y = x;
+    };
+  }
+  #endif
+  #ifdef INSIGHTS_USE_TEMPLATE
+  {
+    {
+      int y = x;
+    };
+  }
+  #endif
+}
+
+void init_list()
+{
+  template for(constexpr auto x : __N)
+  {
+    int y = x;
+  }
+  #ifdef INSIGHTS_USE_TEMPLATE
+  {
+    constexpr const int x = 4;
+    {
+      int y = x;
+    };
+  }
+  #endif
+  #ifdef INSIGHTS_USE_TEMPLATE
+  {
+    constexpr const int x = 5;
+    {
+      int y = x;
+    };
+  }
+  #endif
+}
+
+struct Pair
+{
+  int a;
+  int b;
+  // inline constexpr Pair(const Pair &) noexcept = default;
+};
+
+void destructurable()
+{
+  constexpr const Pair p = {10, 20};
+  template for(constexpr auto x : __N)
+  {
+    int y = x;
+  }
+  #ifdef INSIGHTS_USE_TEMPLATE
+  {
+    {
+      int y = x;
+    };
+  }
+  #endif
+  #ifdef INSIGHTS_USE_TEMPLATE
+  {
+    {
+      int y = x;
+    };
+  }
+  #endif
+}
+
+struct WithValues
+{
+  inline static constexpr const int values[2] = {7, 8};
+};
+
+
+template<typename T>
+void indeterminate()
+{
+  template for(constexpr auto x : __N)
+  {
+    int y = x;
+  }
+}
+
+/* First instantiated from: ExpansionStatementsTest.cpp:42 */
+#ifdef INSIGHTS_USE_TEMPLATE
+template<>
+void indeterminate<WithValues>()
+{
+  template for(constexpr auto x : __N)
+  {
+    int y = x;
+  }
+  #ifdef INSIGHTS_USE_TEMPLATE
+  {
+    {
+      int y = x;
+    };
+  }
+  #endif
+  #ifdef INSIGHTS_USE_TEMPLATE
+  {
+    {
+      int y = x;
+    };
+  }
+  #endif
+}
+#endif
+
+
+int main()
+{
+  iterable();
+  init_list();
+  destructurable();
+  indeterminate<WithValues>();
+  return 0;
+}

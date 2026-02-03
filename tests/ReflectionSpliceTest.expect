@@ -1,0 +1,40 @@
+namespace Ns
+{
+  struct Foo
+  {
+    int x;
+  };
+  
+  int v = 0;
+  
+}
+
+constexpr const meta::info r_type = ^^Ns::Foo;
+constexpr const meta::info r_decl = ^^Ns::v;
+constexpr const meta::info r_ns = ^^Ns;
+
+int a = 1;
+
+template<typename T>
+void splice_dependent()
+{
+  constexpr const meta::info r = ^^T;
+  typename [:TODO(expr):] value = {};
+}
+
+/* First instantiated from: ReflectionSpliceTest.cpp:22 */
+#ifdef INSIGHTS_USE_TEMPLATE
+template<>
+void splice_dependent<int>()
+{
+  constexpr const meta::info r = ^^int;
+  int value = {};
+}
+#endif
+
+
+int main()
+{
+  splice_dependent<int>();
+  return a;
+}
