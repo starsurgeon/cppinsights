@@ -2154,8 +2154,8 @@ void CodeGenerator::InsertArg(const CXXReflectExpr* stmt)
             }
             case ReflectionKind::Namespace: {
                 if(auto* nsDecl = reflection.getReflectedNamespace()) {
-                    if(auto* ns = dyn_cast_or_null<NamespaceDecl>(nsDecl)) {
-                        mOutputFormatHelper.Append(ns->getNameAsString());
+                    if(auto* namedDecl = dyn_cast_or_null<NamedDecl>(nsDecl)) {
+                        mOutputFormatHelper.Append(GetName(*namedDecl));
                     }
                 }
                 break;
