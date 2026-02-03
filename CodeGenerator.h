@@ -691,8 +691,7 @@ class CodeGeneratorVariant
         ~CodeGenerators();
     } cgs;
 
-    CodeGenerator*      cg;
-    OutputFormatHelper& ofm;
+    CodeGenerator* cg;
 
     void Set();
 
@@ -706,7 +705,6 @@ public:
                          CodeGenerator::LambdaStackType&          lambdaStack,
                          CodeGenerator::ProcessingPrimaryTemplate processingPrimaryTemplate)
     : cgs{_outputFormatHelper, lambdaStack, processingPrimaryTemplate}
-    , ofm{_outputFormatHelper}
     , cg{}
     {
         Set();
@@ -714,7 +712,6 @@ public:
 
     CodeGeneratorVariant(OutputFormatHelper& _outputFormatHelper, CodeGenerator::LambdaInInitCapture lambdaInitCapture)
     : cgs{_outputFormatHelper, lambdaInitCapture}
-    , ofm{_outputFormatHelper}
     , cg{}
     {
         Set();

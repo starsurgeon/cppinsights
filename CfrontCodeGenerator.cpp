@@ -1051,7 +1051,7 @@ void CfrontCodeGenerator::InsertArg(const CXXMemberCallExpr* stmt)
         auto* memDecl = me->getMemberDecl();
 
         if(const auto* ar = dyn_cast_or_null<ConstantArrayType>(obj->getType())) {
-            if(const auto* dtor = dyn_cast_or_null<CXXDestructorDecl>(memDecl)) {
+            if(dyn_cast_or_null<CXXDestructorDecl>(memDecl)) {
                 // ignore the reference
                 InsertArg(CallVecDtor(dyn_cast_or_null<UnaryOperator>(obj)->getSubExpr(), ar));
                 return;
@@ -1157,7 +1157,7 @@ void CfrontCodeGenerator::InsertArg(const FunctionDecl* stmt)
 
 void CfrontCodeGenerator::InsertArg(const CXXConstructExpr* stmt)
 {
-    if(P0315Visitor dt{*this}; not dt.TraverseType(stmt->getType())) {
+    if(P0315Visitor<CfrontCodeGenerator> dt{*this}; not dt.TraverseType(stmt->getType())) {
         if(not mLambdaStack.empty()) {
             for(const auto& e : mLambdaStack) {
                 RETURN_IF(LambdaCallerType::VarDecl == e.callerType());
