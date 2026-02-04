@@ -29,11 +29,26 @@ constexpr auto bitwiseOr(Args... args) { return (... | args); }
 
 // = 
 
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wparentheses"
+#endif
+
+/* Clang 20+ interprets the fold expression (... < args) with a comparison operator as potentially
+   ambiguous or misleading (due to the (a < b) < c evaluation order), and issues a hard error 
+   via -Wparentheses.
+   Suppress the warning, as the C++ standard defines this behavior (left fold resulting in boolean
+   comparisons) even if it's often not what programmers intend mathematically.
+*/
+
 template<typename... Args>
 constexpr auto lt(Args... args) { return (... < args); }
 
 template<typename... Args>
 constexpr auto gt(Args... args) { return (... > args); }
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
 
 
 template<typename... Args>
@@ -71,4 +86,3 @@ int main()
     int x = 4;
     x /= 2;
 }
-
