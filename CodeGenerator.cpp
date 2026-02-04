@@ -4672,7 +4672,8 @@ void CodeGenerator::InsertArg(const CXXStdInitializerListExpr* stmt)
         auto internalListName =
             MakeLineColumnName(GetGlobalAST().getSourceManager(), stmt->getBeginLoc(), BuildInternalVarName("list"sv));
 
-        ofm.Append(modifiers, GetTypeNameAsParameter(subExpr->getType(), internalListName));
+        const auto listType = subExpr->getType().getCanonicalType();
+        ofm.Append(modifiers, GetTypeNameAsParameter(listType, internalListName));
         CodeGeneratorVariant codeGenerator{ofm};
         codeGenerator->InsertArg(subExpr);
         ofm.AppendSemiNewLine();

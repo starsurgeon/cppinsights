@@ -163,9 +163,7 @@ BuildNamespace(std::string& fullNamespace, const NestedNameSpecifier* stmt, cons
 {
     RETURN_IF(not stmt);
 
-    if(const auto* prefix = stmt->getPrefix();
-       prefix and not((NestedNameSpecifier::TypeSpec == stmt->getKind()) and
-                      isa<DependentTemplateSpecializationType>(stmt->getAsType()))) {
+    if(const auto* prefix = stmt->getPrefix()) {
         BuildNamespace(fullNamespace, prefix, ignoreNamespace);
     }
 
@@ -563,6 +561,7 @@ private:
     {
         const auto& depName   = type->getDependentTemplateName();
         const auto* qualifier = depName.getQualifier();
+        const bool  hasTemplateKeyword = depName.hasTemplateKeyword();
         const auto  name      = depName.getName();
         const auto* ident     = name.getIdentifier();
         const auto  nameText  = ident
@@ -570,8 +569,8 @@ private:
                                     : getOperatorSpelling(name.getOperator());
 
         mData.Append(GetElaboratedTypeKeyword(type->getKeyword()),
-                     GetNestedName(qualifier),
-                     kwTemplateSpace,
+                     qualifier ? GetNestedName(qualifier) : mScope,
+                     hasTemplateKeyword ? kwTemplateSpace : ""sv,
                      nameText);
 
         CodeGenerator codeGenerator{mData};
