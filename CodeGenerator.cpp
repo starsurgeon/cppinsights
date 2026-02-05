@@ -2182,6 +2182,140 @@ void CodeGenerator::InsertArg(const CXXSpliceExpr* stmt)
 }
 //-----------------------------------------------------------------------------
 
+static std::optional<uint64_t> TryEvaluateAsIndex(const Expr* expr)
+{
+    if(nullptr == expr) {
+        return std::nullopt;
+    }
+
+    expr = expr->IgnoreParenImpCasts();
+
+    if(const auto* literal = dyn_cast<IntegerLiteral>(expr)) {
+        return literal->getValue().getLimitedValue();
+    }
+
+    Expr::EvalResult evalResult{};
+    if(expr->EvaluateAsInt(evalResult, GetGlobalAST()) and evalResult.Val.isInt()) {
+        return evalResult.Val.getInt().getLimitedValue();
+    }
+
+    return std::nullopt;
+}
+//-----------------------------------------------------------------------------
+
+void CodeGenerator::InsertArg(const CXXIterableExpansionSelectExpr* stmt)
+{
+    if(const auto* implExpr = stmt->getImplExpr()) {
+        InsertArg(implExpr);
+    } else {
+        mOutputFormatHelper.Append("/* iterable expansion select */");
+    }
+}
+//-----------------------------------------------------------------------------
+
+void CodeGenerator::InsertArg(const CXXExpansionInitListExpr* stmt)
+{
+    mOutputFormatHelper.Append("{");
+    ForEachArg(stmt->getSubExprs(), [&](const auto* init) { InsertArg(init); });
+    mOutputFormatHelper.Append("}");
+}
+//-----------------------------------------------------------------------------
+
+void CodeGenerator::InsertArg(const CXXExpansionInitListSelectExpr* stmt)
+{
+    const auto* rangeExpr = stmt->getRangeExpr();
+    const auto* idxExpr   = stmt->getIdxExpr();
+
+    if(const auto* initList = dyn_cast_or_null<CXXExpansionInitListExpr>(rangeExpr)) {
+        if(auto idx = TryEvaluateAsIndex(idxExpr); idx and (*idx < initList->getSubExprs().size())) {
+            InsertArg(initList->getSubExprs()[*idx]);
+            return;
+        }
+    }
+
+    if(rangeExpr) {
+        InsertArg(rangeExpr);
+    } else {
+        mOutputFormatHelper.Append("/* expansion init-list range */");
+    }
+
+    mOutputFormatHelper.Append("[");
+    if(idxExpr) {
+        InsertArg(idxExpr);
+    } else {
+        mOutputFormatHelper.Append("/* expansion init-list idx */");
+    }
+    mOutputFormatHelper.Append("]");
+}
+//-----------------------------------------------------------------------------
+
+void CodeGenerator::InsertArg(const CXXDestructurableExpansionSelectExpr* stmt)
+{
+    if(const auto* decomposition = stmt->getDecompositionDecl()) {
+        if(auto idx = TryEvaluateAsIndex(stmt->getIdxExpr())) {
+            size_t currentIdx = 0;
+            for(const auto* binding : decomposition->flat_bindings()) {
+                if(currentIdx != *idx) {
+                    ++currentIdx;
+                    continue;
+                }
+
+                if(nullptr == binding) {
+                    break;
+                }
+
+                if(const auto* expr = binding->getBinding()) {
+                    InsertArg(expr);
+                    return;
+                }
+
+                if(const auto* holdingVar = binding->getHoldingVar()) {
+                    mOutputFormatHelper.Append(GetName(*holdingVar));
+                    return;
+                }
+
+                if(const auto name = binding->getNameAsString(); not name.empty()) {
+                    mOutputFormatHelper.Append(name);
+                    return;
+                }
+
+                break;
+            }
+        }
+    }
+
+    mOutputFormatHelper.Append("/* destructurable expansion select */");
+}
+//-----------------------------------------------------------------------------
+
+void CodeGenerator::InsertArg(const CXXIndeterminateExpansionSelectExpr* stmt)
+{
+    const auto* rangeExpr = stmt->getRangeExpr();
+    const auto* idxExpr   = stmt->getIdxExpr();
+
+    if(const auto* initList = dyn_cast_or_null<CXXExpansionInitListExpr>(rangeExpr)) {
+        if(auto idx = TryEvaluateAsIndex(idxExpr); idx and (*idx < initList->getSubExprs().size())) {
+            InsertArg(initList->getSubExprs()[*idx]);
+            return;
+        }
+    }
+
+    if(rangeExpr) {
+        InsertArg(rangeExpr);
+    } else {
+        mOutputFormatHelper.Append("/* indeterminate expansion range */");
+    }
+
+    mOutputFormatHelper.Append("[");
+    if(idxExpr) {
+        InsertArg(idxExpr);
+    } else {
+        mOutputFormatHelper.Append("/* indeterminate expansion idx */");
+    }
+    mOutputFormatHelper.Append("]");
+}
+//-----------------------------------------------------------------------------
+
 void CodeGenerator::InsertArg(const CXXIterableExpansionStmt* stmt)
 {
     // Output: template for (var : range) { body }

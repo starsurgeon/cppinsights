@@ -1,0 +1,13 @@
+.tmp.cpp:4:12: error: expected '<' after 'template'
+    4 |   template for(constexpr auto x : __N)
+      |            ^
+.tmp.cpp:33:12: error: expected '<' after 'template'
+   33 |   template for(constexpr auto x : __N)
+      |            ^
+.tmp.cpp:65:12: error: expected '<' after 'template'
+   65 |   template for(constexpr auto x : __N)
+      |            ^
+.tmp.cpp:94:12: error: expected '<' after 'template'
+   94 |   template for(constexpr auto x : __N)
+      |            ^
+4 errors generated.
