@@ -9,17 +9,17 @@ namespace Ns
   
 }
 
-constexpr const meta::info r_type = ^^Ns::Foo;
-constexpr const meta::info r_decl = ^^Ns::v;
-constexpr const meta::info r_ns = ^^Ns;
+constexpr auto r_type = ^^Ns::Foo;
+constexpr auto r_decl = ^^Ns::v;
+constexpr auto r_ns = ^^Ns;
 
 int a = 1;
 
 template<typename T>
 void splice_dependent()
 {
-  constexpr const meta::info r = ^^T;
-  typename [:TODO(expr):] value = {};
+  constexpr auto r = ^^T;
+  typename [:r:] value = {};
 }
 
 /* First instantiated from: ReflectionSpliceTest.cpp:22 */
@@ -27,7 +27,7 @@ void splice_dependent()
 template<>
 void splice_dependent<int>()
 {
-  constexpr const meta::info r = ^^int;
+  constexpr auto r = ^^int;
   int value = {};
 }
 #endif

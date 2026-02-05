@@ -1,7 +1,7 @@
 void iterable()
 {
   constexpr const int arr[3] = {1, 2, 3};
-  template for(constexpr auto x : __N)
+  template for(constexpr auto x : {arr[0], arr[1], arr[2]})
   {
     int y = x;
   }
@@ -30,7 +30,7 @@ void iterable()
 
 void init_list()
 {
-  template for(constexpr auto x : __N)
+  template for(constexpr auto x : {4, 5})
   {
     int y = x;
   }
@@ -62,7 +62,7 @@ struct Pair
 void destructurable()
 {
   constexpr const Pair p = {10, 20};
-  template for(constexpr auto x : __N)
+  template for(constexpr auto x : Pair(p))
   {
     int y = x;
   }
@@ -91,7 +91,7 @@ struct WithValues
 template<typename T>
 void indeterminate()
 {
-  template for(constexpr auto x : __N)
+  template for(constexpr auto x : T::values)
   {
     int y = x;
   }
@@ -102,7 +102,7 @@ void indeterminate()
 template<>
 void indeterminate<WithValues>()
 {
-  template for(constexpr auto x : __N)
+  template for(constexpr auto x : {WithValues::values[0], WithValues::values[1]})
   {
     int y = x;
   }

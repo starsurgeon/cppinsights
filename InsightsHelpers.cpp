@@ -765,6 +765,36 @@ private:
         return false;
     }
 
+    bool HandleType(const ReflectionSpliceType* type)
+    {
+        if(const auto underlying = type->getUnderlyingType(); not underlying.isNull()) {
+            if(not underlying->isDependentType()) {
+                return HandleType(underlying.getTypePtrOrNull());
+            }
+        }
+
+        if(type->getTypenameKWLoc().isValid()) {
+            mData.Append("typename "sv);
+        }
+
+        mData.Append("[:");
+
+        if(const auto* splice = type->getSplice()) {
+            if(const auto* operand = splice->getOperand()) {
+                CodeGenerator codeGenerator{mData};
+                codeGenerator.InsertArg(operand);
+            } else {
+                mData.Append("/* splice */");
+            }
+        } else {
+            mData.Append("/* splice */");
+        }
+
+        mData.Append(":]");
+
+        return true;
+    }
+
     bool HandleType(const Type* type)
     {
 #define HANDLE_TYPE(t)                                                                                                 \
@@ -795,6 +825,7 @@ private:
         HANDLE_TYPE(DependentTemplateSpecializationType);
         HANDLE_TYPE(PackExpansionType);
         HANDLE_TYPE(DecltypeType);
+        HANDLE_TYPE(ReflectionSpliceType);
 
 #undef HANDLE_TYPE
         return false;

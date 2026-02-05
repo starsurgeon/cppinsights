@@ -1354,8 +1354,22 @@ void CodeGenerator::InsertArg(const VarDecl* stmt)
 
                 const auto varName = FormatVarTemplateSpecializationDecl(stmt, StrCat(scope, GetName(*stmt)));
 
-                // TODO: to keep the special handling for lambdas, do this only for template specializations
-                mOutputFormatHelper.Append(GetTypeNameAsParameter(GetType(stmt->getType()), varName));
+                const auto useAutoForReflectionInit = [&]() {
+                    const auto* initExpr = stmt->getInit();
+                    if(nullptr == initExpr) {
+                        return false;
+                    }
+
+                    initExpr = initExpr->IgnoreParenImpCasts();
+                    return isa<CXXReflectExpr>(initExpr);
+                }();
+
+                if(useAutoForReflectionInit) {
+                    mOutputFormatHelper.Append("auto "sv, varName);
+                } else {
+                    // TODO: to keep the special handling for lambdas, do this only for template specializations
+                    mOutputFormatHelper.Append(GetTypeNameAsParameter(GetType(stmt->getType()), varName));
+                }
             }
         } else {
             const std::string_view pointer = [&]() {
@@ -2203,6 +2217,71 @@ static std::optional<uint64_t> TryEvaluateAsIndex(const Expr* expr)
 }
 //-----------------------------------------------------------------------------
 
+static const Expr* ExtractExpansionRangeExpr(const CXXExpansionStmt* stmt)
+{
+    if(nullptr == stmt) {
+        return nullptr;
+    }
+
+    const auto* init = stmt->getInit();
+    if(nullptr == init) {
+        return nullptr;
+    }
+
+    if(const auto* expr = dyn_cast<Expr>(init)) {
+        return expr;
+    }
+
+    if(const auto* declStmt = dyn_cast<DeclStmt>(init)) {
+        if(declStmt->isSingleDecl()) {
+            if(const auto* varDecl = dyn_cast_or_null<VarDecl>(declStmt->getSingleDecl())) {
+                if(const auto* initExpr = varDecl->getInit()) {
+                    return initExpr;
+                }
+            }
+        }
+    }
+
+    return nullptr;
+}
+//-----------------------------------------------------------------------------
+
+static const Expr* ExtractExpansionRangeExprFromVar(const CXXExpansionStmt* stmt)
+{
+    if(nullptr == stmt) {
+        return nullptr;
+    }
+
+    const auto* varDecl = stmt->getExpansionVariable();
+    if(nullptr == varDecl) {
+        return nullptr;
+    }
+
+    const auto* initExpr = varDecl->getInit();
+    if(nullptr == initExpr) {
+        return nullptr;
+    }
+
+    initExpr = initExpr->IgnoreParenImpCasts();
+
+    if(const auto* select = dyn_cast<CXXIterableExpansionSelectExpr>(initExpr)) {
+        if(const auto* rangeVar = select->getRangeVar()) {
+            return rangeVar->getInit();
+        }
+    } else if(const auto* select = dyn_cast<CXXExpansionInitListSelectExpr>(initExpr)) {
+        return select->getRangeExpr();
+    } else if(const auto* select = dyn_cast<CXXIndeterminateExpansionSelectExpr>(initExpr)) {
+        return select->getRangeExpr();
+    } else if(const auto* select = dyn_cast<CXXDestructurableExpansionSelectExpr>(initExpr)) {
+        if(const auto* decomposition = select->getDecompositionDecl()) {
+            return decomposition->getInit();
+        }
+    }
+
+    return nullptr;
+}
+//-----------------------------------------------------------------------------
+
 void CodeGenerator::InsertArg(const CXXIterableExpansionSelectExpr* stmt)
 {
     if(const auto* implExpr = stmt->getImplExpr()) {
@@ -2332,7 +2411,11 @@ void CodeGenerator::InsertArg(const CXXIterableExpansionStmt* stmt)
     mOutputFormatHelper.Append(" : ");
 
     // The range being iterated
-    if(const auto* tparamRef = stmt->getTParamRef()) {
+    if(const auto* rangeExpr = ExtractExpansionRangeExprFromVar(stmt)) {
+        InsertArg(rangeExpr);
+    } else if(const auto* rangeExpr = ExtractExpansionRangeExpr(stmt)) {
+        InsertArg(rangeExpr);
+    } else if(const auto* tparamRef = stmt->getTParamRef()) {
         InsertArg(tparamRef);
     }
 
@@ -2357,7 +2440,11 @@ void CodeGenerator::InsertArg(const CXXIndeterminateExpansionStmt* stmt)
         mOutputFormatHelper.Append(varDecl->getNameAsString());
     }
     mOutputFormatHelper.Append(" : ");
-    if(const auto* tparamRef = stmt->getTParamRef()) {
+    if(const auto* rangeExpr = ExtractExpansionRangeExprFromVar(stmt)) {
+        InsertArg(rangeExpr);
+    } else if(const auto* rangeExpr = ExtractExpansionRangeExpr(stmt)) {
+        InsertArg(rangeExpr);
+    } else if(const auto* tparamRef = stmt->getTParamRef()) {
         InsertArg(tparamRef);
     }
     mOutputFormatHelper.Append(")");
@@ -2379,7 +2466,11 @@ void CodeGenerator::InsertArg(const CXXDestructurableExpansionStmt* stmt)
         mOutputFormatHelper.Append(varDecl->getNameAsString());
     }
     mOutputFormatHelper.Append(" : ");
-    if(const auto* tparamRef = stmt->getTParamRef()) {
+    if(const auto* rangeExpr = ExtractExpansionRangeExprFromVar(stmt)) {
+        InsertArg(rangeExpr);
+    } else if(const auto* rangeExpr = ExtractExpansionRangeExpr(stmt)) {
+        InsertArg(rangeExpr);
+    } else if(const auto* tparamRef = stmt->getTParamRef()) {
         InsertArg(tparamRef);
     }
     mOutputFormatHelper.Append(")");
@@ -2401,7 +2492,11 @@ void CodeGenerator::InsertArg(const CXXInitListExpansionStmt* stmt)
         mOutputFormatHelper.Append(varDecl->getNameAsString());
     }
     mOutputFormatHelper.Append(" : ");
-    if(const auto* tparamRef = stmt->getTParamRef()) {
+    if(const auto* rangeExpr = ExtractExpansionRangeExprFromVar(stmt)) {
+        InsertArg(rangeExpr);
+    } else if(const auto* rangeExpr = ExtractExpansionRangeExpr(stmt)) {
+        InsertArg(rangeExpr);
+    } else if(const auto* tparamRef = stmt->getTParamRef()) {
         InsertArg(tparamRef);
     }
     mOutputFormatHelper.Append(")");
