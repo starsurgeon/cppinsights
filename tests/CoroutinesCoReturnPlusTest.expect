@@ -37,7 +37,7 @@ struct generator
     {
     }
     
-    static inline generator get_return_object_on_allocation_failure()
+     static inline generator get_return_object_on_allocation_failure()
     {
       throw std::bad_alloc();
     }

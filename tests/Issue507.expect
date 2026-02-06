@@ -3,7 +3,7 @@
 
 struct example_struct
 {
-  inline example_struct()
+   inline example_struct()
   {
     throw ;
   }

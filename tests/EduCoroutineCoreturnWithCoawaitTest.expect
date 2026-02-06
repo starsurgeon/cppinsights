@@ -43,7 +43,7 @@ struct generator
       this->current_value = v;
     }
     
-    static inline generator get_return_object_on_allocation_failure()
+     static inline generator get_return_object_on_allocation_failure()
     {
       throw std::bad_alloc();
     }

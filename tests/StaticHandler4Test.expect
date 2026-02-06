@@ -1,7 +1,7 @@
 #include <new> // for thread-safe static's placement new
 #include <stdint.h> // for uint64_t under Linux/GCC
 
-void X() noexcept(false)
+ void X() noexcept(false)
 {
   throw ;
 }

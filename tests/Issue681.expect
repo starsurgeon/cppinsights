@@ -7,7 +7,7 @@ static inline int clz32(unsigned int a)
 
 static inline int clz64(uint64_t a)
 {
-  return __builtin_clzll(a);
+  return __builtin_clzll(static_cast<unsigned long long>(a));
 }
 
 static inline int ctz32(unsigned int a)
@@ -17,5 +17,5 @@ static inline int ctz32(unsigned int a)
 
 static inline int ctz64(uint64_t a)
 {
-  return __builtin_ctzll(a);
+  return __builtin_ctzll(static_cast<unsigned long long>(a));
 }

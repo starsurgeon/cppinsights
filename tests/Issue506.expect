@@ -11,7 +11,7 @@ bool search(char ch, Match &&... matchers)
 /* First instantiated from: Issue506.cpp:12 */
 #ifdef INSIGHTS_USE_TEMPLATE
 template<>
-bool search<int (&)(int), int (&)(int), __lambda_12_50>(char ch, int (&__matchers1)(int), int (&__matchers2)(int), __lambda_12_50 && __matchers3)
+bool search<int (&)(int) noexcept, int (&)(int) noexcept, __lambda_12_50>(char ch, int (&__matchers1)(int) noexcept, int (&__matchers2)(int) noexcept, __lambda_12_50 && __matchers3)
 {
   return static_cast<bool>(__matchers1(static_cast<int>(ch))) || (static_cast<bool>(__matchers2(static_cast<int>(ch))) || __matchers3.operator()(ch));
 }

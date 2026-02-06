@@ -56,7 +56,7 @@ struct task
       return {};
     }
     
-    inline void unhandled_exception()
+     inline void unhandled_exception()
     {
       throw ;
     }
@@ -168,7 +168,7 @@ struct task<int>
       return {};
     }
     
-    inline void unhandled_exception()
+     inline void unhandled_exception()
     {
       throw ;
     }

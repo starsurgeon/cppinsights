@@ -27,14 +27,6 @@ class Data<long>
 
 #endif
 
-template<typename T>
-Data(const T & t) -> Data<T>;
-
-#ifdef INSIGHTS_USE_TEMPLATE
-template<>
-Data(const int & t) -> Data<int>;
-#endif
-
 
 
 Data(const char *) -> Data<std::basic_string<char, std::char_traits<char>, std::allocator<char> > >;

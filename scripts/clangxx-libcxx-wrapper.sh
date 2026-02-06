@@ -8,6 +8,8 @@ C_HEADERS_ARCH="${C_HEADERS_ARCH:-/usr/include/x86_64-linux-gnu}"
 GCC_HEADERS="${GCC_HEADERS:-/usr/lib/gcc/x86_64-linux-gnu/13/include}"
 
 extra=(
+  -fexpansion-statements
+  -freflection-latest
   -nostdinc++
   -isystem "$LIBCXX_HEADERS"
   -isystem "$C_HEADERS"
