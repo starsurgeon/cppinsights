@@ -120,7 +120,7 @@ def testCompile(tmpFileName, f, args, fileName, cppStd):
 def main():
     parser = argparse.ArgumentParser(description='Description of your program')
     parser.add_argument('--insights',       help='C++ Insights binary',  required=True)
-    parser.add_argument('--cxx',            help='C++ compiler to used', default='/usr/local/clang-current/bin/clang++')
+    parser.add_argument('--cxx',            help='C++ compiler to used', default='/home/amue/clang-p2996-bin/bin/clang++')
     parser.add_argument('--failure-is-ok',  help='Failing tests are ok', default=False, action='store_true')
     parser.add_argument('--update-tests',   help='Update failing tests', default=False, action='store_true')
     parser.add_argument('--std',            help='C++ Standard to used', default='c++17')
@@ -265,4 +265,3 @@ def main():
 
 sys.exit(main())
 #------------------------------------------------------------------------------
-

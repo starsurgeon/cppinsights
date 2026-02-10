@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-CLANGXX_BIN="${CLANGXX_BIN:-/usr/bin/clang++-20}"
+CLANGXX_BIN="${CLANGXX_BIN:-/home/amue/clang-p2996-bin/bin/clang++}"
 LIBCXX_HEADERS="${LIBCXX_HEADERS:-/usr/include/c++/v1}"
 C_HEADERS="${C_HEADERS:-/usr/include}"
 C_HEADERS_ARCH="${C_HEADERS_ARCH:-/usr/include/x86_64-linux-gnu}"

@@ -1,5 +1,5 @@
 // cmdline:-std=c++26
-// cmdlineinsights:--extra-arg=-freflection-latest
+// cmdlineinsights:--extra-arg=-freflection-latest --extra-arg=-fexpansion-statements
 
 namespace Ns {
 struct Foo { int x; };

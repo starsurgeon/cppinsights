@@ -99,7 +99,7 @@ def replaceInsights(match, parser, args):
 def main():
     parser = argparse.ArgumentParser(description='Description of your program')
     parser.add_argument('--insights',       help='C++ Insights binary',  required=True)
-    parser.add_argument('--cxx',            help='C++ compiler to used', default='/usr/local/clang-current/bin/clang++')
+    parser.add_argument('--cxx',            help='C++ compiler to used', default='/home/amue/clang-p2996-bin/bin/clang++')
     parser.add_argument('--std',            help='C++ Standard to used', default='c++17')
     parser.add_argument('args', nargs=argparse.REMAINDER)
     args = vars(parser.parse_args())
@@ -156,4 +156,3 @@ def main():
 
 sys.exit(main())
 #------------------------------------------------------------------------------
-

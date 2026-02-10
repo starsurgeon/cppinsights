@@ -1,3 +1,4 @@
 #!/usr/bin/env bash
 set -euo pipefail
-exec /opt/p2996/bin/clang++ -fexpansion-statements -freflection-latest "$@"
+CLANGXX_BIN="${CLANGXX_BIN:-/home/amue/clang-p2996-bin/bin/clang++}"
+exec "$CLANGXX_BIN" -fexpansion-statements -freflection-latest "$@"
