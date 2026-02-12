@@ -2196,6 +2196,20 @@ void CodeGenerator::InsertArg(const CXXSpliceExpr* stmt)
 }
 //-----------------------------------------------------------------------------
 
+void CodeGenerator::InsertArg(const ExplDependentCallExpr* stmt)
+{
+    InsertArg(stmt->getSubExpr());
+}
+//-----------------------------------------------------------------------------
+
+void CodeGenerator::InsertArg(const CXXDependentMemberSpliceExpr* stmt)
+{
+    InsertArg(stmt->getBase());
+    mOutputFormatHelper.Append(stmt->isArrow() ? "->"sv : "."sv);
+    InsertArg(stmt->getRHS());
+}
+//-----------------------------------------------------------------------------
+
 static std::optional<uint64_t> TryEvaluateAsIndex(const Expr* expr)
 {
     if(nullptr == expr) {
