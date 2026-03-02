@@ -225,57 +225,81 @@ static std::optional<std::pair<const VarDecl*, uint64_t>> TryExtractExpansionRan
 }
 //-----------------------------------------------------------------------------
 
-static std::optional<std::string> TryGetIdentifierFromExpansionRange(const VarDecl& rangeVar, const uint64_t idx)
+static const NamedDecl* TryGetReflectedNamedDeclFromExpansionRange(const VarDecl& rangeVar, const uint64_t idx)
 {
     const auto* init = rangeVar.getInit();
     const auto* call = dyn_cast_or_null<CallExpr>(IgnoreTransparentExprNodes(init));
     if((nullptr == call) or not IsCallToNamedFunction(*call, "define_static_array") or (0U == call->getNumArgs())) {
-        return std::nullopt;
+        return nullptr;
     }
 
-    const auto* membersCall = dyn_cast_or_null<CallExpr>(IgnoreTransparentExprNodes(call->getArg(0)));
-    if((nullptr == membersCall) or not IsCallToNamedFunction(*membersCall, "nonstatic_data_members_of") or
-       (0U == membersCall->getNumArgs())) {
-        return std::nullopt;
+    const auto* reflectedCall = dyn_cast_or_null<CallExpr>(IgnoreTransparentExprNodes(call->getArg(0)));
+    if((nullptr == reflectedCall) or (0U == reflectedCall->getNumArgs())) {
+        return nullptr;
     }
 
-    const auto* reflectExpr = dyn_cast_or_null<CXXReflectExpr>(IgnoreTransparentExprNodes(membersCall->getArg(0)));
+    const auto* reflectExpr = dyn_cast_or_null<CXXReflectExpr>(IgnoreTransparentExprNodes(reflectedCall->getArg(0)));
     if((nullptr == reflectExpr) or reflectExpr->hasDependentSubExpr()) {
-        return std::nullopt;
+        return nullptr;
     }
 
     const auto& reflection = reflectExpr->getReflection();
-    if(ReflectionKind::Type != reflection.getReflectionKind()) {
-        return std::nullopt;
-    }
-
-    const auto reflectedType = reflection.getReflectedType();
-    const auto* recordDecl   = reflectedType->getAsCXXRecordDecl();
-    if(nullptr == recordDecl) {
-        return std::nullopt;
-    }
-
-    uint64_t currentIdx{};
-    for(const auto* field : recordDecl->fields()) {
-        if(field->isImplicit()) {
-            continue;
+    if(IsCallToNamedFunction(*reflectedCall, "nonstatic_data_members_of")) {
+        if(ReflectionKind::Type != reflection.getReflectionKind()) {
+            return nullptr;
         }
 
-        if(currentIdx == idx) {
-            return field->getNameAsString();
+        const auto reflectedType = reflection.getReflectedType();
+        const auto* recordDecl   = reflectedType->getAsCXXRecordDecl();
+        if(nullptr == recordDecl) {
+            return nullptr;
         }
 
-        ++currentIdx;
+        uint64_t currentIdx{};
+        for(const auto* field : recordDecl->fields()) {
+            if(field->isImplicit()) {
+                continue;
+            }
+
+            if(currentIdx == idx) {
+                return field;
+            }
+
+            ++currentIdx;
+        }
+
+        return nullptr;
     }
 
-    return std::nullopt;
+    if(IsCallToNamedFunction(*reflectedCall, "enumerators_of")) {
+        if(ReflectionKind::Type != reflection.getReflectionKind()) {
+            return nullptr;
+        }
+
+        const auto reflectedType = reflection.getReflectedType();
+        const auto* enumDecl     = dyn_cast_or_null<EnumDecl>(reflectedType->getAsTagDecl());
+        if(nullptr == enumDecl) {
+            return nullptr;
+        }
+
+        uint64_t currentIdx{};
+        for(const auto* enumerator : enumDecl->enumerators()) {
+            if(currentIdx == idx) {
+                return enumerator;
+            }
+
+            ++currentIdx;
+        }
+    }
+
+    return nullptr;
 }
 //-----------------------------------------------------------------------------
 
-static std::optional<std::string> TryGetReflectedIdentifierName(const Expr* expr)
+static const NamedDecl* TryGetReflectedNamedDecl(const Expr* expr)
 {
     if(nullptr == expr) {
-        return std::nullopt;
+        return nullptr;
     }
 
     expr = IgnoreTransparentExprNodes(expr);
@@ -283,30 +307,51 @@ static std::optional<std::string> TryGetReflectedIdentifierName(const Expr* expr
     if(const auto* declRef = dyn_cast<DeclRefExpr>(expr)) {
         if(const auto* varDecl = dyn_cast<VarDecl>(declRef->getDecl())) {
             if(const auto selected = TryExtractExpansionRangeAndIndex(varDecl->getInit()); selected) {
-                if(const auto name = TryGetIdentifierFromExpansionRange(*selected->first, selected->second); name) {
-                    return name;
+                if(const auto* decl = TryGetReflectedNamedDeclFromExpansionRange(*selected->first, selected->second)) {
+                    return decl;
                 }
             }
 
-            return TryGetReflectedIdentifierName(varDecl->getInit());
+            return TryGetReflectedNamedDecl(varDecl->getInit());
         }
     }
 
     if(const auto* select = dyn_cast<CXXIterableExpansionSelectExpr>(expr)) {
-        return TryGetReflectedIdentifierName(select->getImplExpr());
+        return TryGetReflectedNamedDecl(select->getImplExpr());
     }
 
     if(const auto* reflectExpr = dyn_cast<CXXReflectExpr>(expr); reflectExpr and not reflectExpr->hasDependentSubExpr()) {
         const auto& reflection = reflectExpr->getReflection();
-        if((ReflectionKind::Declaration == reflection.getReflectionKind()) or
-           (ReflectionKind::Type == reflection.getReflectionKind())) {
-            if(const auto* namedDecl = dyn_cast_or_null<NamedDecl>(reflection.getReflectedDecl())) {
-                return namedDecl->getNameAsString();
-            }
+        if(ReflectionKind::Declaration == reflection.getReflectionKind()) {
+            return dyn_cast_or_null<NamedDecl>(reflection.getReflectedDecl());
+        }
+    }
+
+    return nullptr;
+}
+//-----------------------------------------------------------------------------
+
+static std::optional<std::string> TryGetReflectedIdentifierName(const Expr* expr)
+{
+    if(const auto* namedDecl = TryGetReflectedNamedDecl(expr)) {
+        if(not namedDecl->getName().empty()) {
+            return namedDecl->getNameAsString();
         }
     }
 
     return std::nullopt;
+}
+//-----------------------------------------------------------------------------
+
+static std::string GetReflectedSpliceName(const NamedDecl& namedDecl)
+{
+    if(const auto* enumConstantDecl = dyn_cast<EnumConstantDecl>(&namedDecl)) {
+        if(const auto* enumDecl = dyn_cast_or_null<EnumDecl>(enumConstantDecl->getDeclContext())) {
+            return StrCat(GetName(*enumDecl), "::"sv, enumConstantDecl->getNameAsString());
+        }
+    }
+
+    return GetName(namedDecl);
 }
 //-----------------------------------------------------------------------------
 
@@ -320,6 +365,16 @@ static bool HasNonFoldableReferenceToDecl(const Stmt* stmt, const ValueDecl* dec
         if((1U == callExpr->getNumArgs()) and IsCallToNamedFunction(*callExpr, "identifier_of")) {
             if(const auto name = TryGetReflectedIdentifierName(callExpr->getArg(0)); name) {
                 return false;
+            }
+        }
+    }
+
+    if(const auto* spliceExpr = dyn_cast<CXXSpliceExpr>(stmt)) {
+        if(const auto* splice = spliceExpr->getSplice()) {
+            if(const auto* operand = splice->getOperand()) {
+                if(nullptr != TryGetReflectedNamedDecl(operand)) {
+                    return false;
+                }
             }
         }
     }
@@ -2471,6 +2526,15 @@ void CodeGenerator::InsertArg(const CXXReflectExpr* stmt)
 
 void CodeGenerator::InsertArg(const CXXSpliceExpr* stmt)
 {
+    if(const auto* splice = stmt->getSplice()) {
+        if(const auto* operand = splice->getOperand()) {
+            if(const auto* namedDecl = TryGetReflectedNamedDecl(operand)) {
+                mOutputFormatHelper.Append(GetReflectedSpliceName(*namedDecl));
+                return;
+            }
+        }
+    }
+
     mOutputFormatHelper.Append("[:");
     if(const auto* splice = stmt->getSplice()) {
         if(const auto* operand = splice->getOperand()) {
