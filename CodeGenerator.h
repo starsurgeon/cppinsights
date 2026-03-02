@@ -376,6 +376,7 @@ protected:
     void InsertIfOrSwitchInitVariables(same_as_any_of<const IfStmt, const SwitchStmt> auto* stmt);
 
     void InsertExpansionInstantiations(const CXXExpansionStmt* stmt, unsigned numInstantiations);
+    bool TryInsertCollapsedExpansionInstantiations(const CXXExpansionStmt* stmt);
 
     void InsertInstantiationPoint(const SourceManager& sm, const SourceLocation& instLoc, std::string_view text = {});
 
@@ -464,6 +465,7 @@ protected:
     bool mRequiresImplicitReturnZero{};  //!< Track whether this is a function with an imlpicit return 0.
     bool mSkipSemi{};
     ProcessingPrimaryTemplate                 mProcessingPrimaryTemplate{};
+    bool                                      mProcessingTemplateInstantiationBody{};
     static inline std::map<std::string, bool> mSeenDecls{};
 };
 //-----------------------------------------------------------------------------

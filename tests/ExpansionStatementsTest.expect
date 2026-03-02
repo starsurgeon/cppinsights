@@ -102,24 +102,20 @@ void indeterminate()
 template<>
 void indeterminate<WithValues>()
 {
-  template for(constexpr auto x : {WithValues::values[0], WithValues::values[1]})
+  
   {
-    int y = x;
-  }
-  #ifdef INSIGHTS_USE_TEMPLATE
+    constexpr const auto __range = {WithValues::values[0], WithValues::values[1]};
   {
     {
       int y = x;
     };
   }
-  #endif
-  #ifdef INSIGHTS_USE_TEMPLATE
   {
     {
       int y = x;
     };
   }
-  #endif
+  }
 }
 #endif
 

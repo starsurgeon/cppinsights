@@ -9,6 +9,7 @@
 #define OUTPUT_FORMAT_HELPER_H
 //-----------------------------------------------------------------------------
 
+#include <cassert>
 #include <string_view>
 #include <utility>
 using namespace std::literals;
@@ -231,12 +232,33 @@ public:
         }
     }
 
-    void InsertIfDefTemplateGuard() { AppendNewLine("#ifdef INSIGHTS_USE_TEMPLATE"sv); }
-    void InsertEndIfTemplateGuard() { AppendNewLine("#endif"sv); }
+    void InsertIfDefTemplateGuard()
+    {
+        if(0U == mTemplateGuardDepth) {
+            AppendNewLine("#ifdef INSIGHTS_USE_TEMPLATE"sv);
+        }
+
+        ++mTemplateGuardDepth;
+    }
+
+    void InsertEndIfTemplateGuard()
+    {
+        if(0U == mTemplateGuardDepth) {
+            assert(false and "unbalanced template guard emission");
+            return;
+        }
+
+        if(1U == mTemplateGuardDepth) {
+            AppendNewLine("#endif"sv);
+        }
+
+        --mTemplateGuardDepth;
+    }
 
 private:
     static constexpr unsigned SCOPE_INDENT{2};
     unsigned                  mDefaultIndent{};
+    unsigned                  mTemplateGuardDepth{};
     std::string               mOutput{};
 
     void Indent(unsigned count);

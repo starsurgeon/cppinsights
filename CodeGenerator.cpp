@@ -122,6 +122,288 @@ static std::string_view GetTagDeclTypeName(const TagDecl& decl)
 }
 //-----------------------------------------------------------------------------
 
+static bool IsCallToNamedFunction(const CallExpr& call, std::string_view name)
+{
+    if(const auto* namedDecl = dyn_cast_or_null<NamedDecl>(call.getCalleeDecl())) {
+        if(namedDecl->getNameAsString() == name) {
+            return true;
+        }
+    }
+
+    const auto* callee = call.getCallee()->IgnoreParenImpCasts();
+    if(const auto* declRef = dyn_cast_or_null<DeclRefExpr>(callee)) {
+        return declRef->getNameInfo().getAsString() == name;
+    }
+
+    if(const auto* unresolved = dyn_cast_or_null<UnresolvedLookupExpr>(callee)) {
+        return unresolved->getName().getAsString() == name;
+    }
+
+    return false;
+}
+//-----------------------------------------------------------------------------
+
+static std::optional<uint64_t> TryEvaluateAsIndex(const Expr* expr);
+//-----------------------------------------------------------------------------
+
+static const Expr* IgnoreTransparentExprNodes(const Expr* expr)
+{
+    while(nullptr != expr) {
+        expr = expr->IgnoreParenImpCasts();
+
+        if(const auto* ewc = dyn_cast<ExprWithCleanups>(expr)) {
+            expr = ewc->getSubExpr();
+            continue;
+        }
+
+        if(const auto* mte = dyn_cast<MaterializeTemporaryExpr>(expr)) {
+            expr = mte->getSubExpr();
+            continue;
+        }
+
+        if(const auto* bte = dyn_cast<CXXBindTemporaryExpr>(expr)) {
+            expr = bte->getSubExpr();
+            continue;
+        }
+
+        if(const auto* constantExpr = dyn_cast<ConstantExpr>(expr)) {
+            expr = constantExpr->getSubExpr();
+            continue;
+        }
+
+        break;
+    }
+
+    return expr;
+}
+//-----------------------------------------------------------------------------
+
+static std::optional<std::pair<const VarDecl*, uint64_t>> TryExtractExpansionRangeAndIndex(const Expr* expr)
+{
+    if(nullptr == expr) {
+        return std::nullopt;
+    }
+
+    expr = IgnoreTransparentExprNodes(expr);
+
+    if(const auto* select = dyn_cast<CXXIterableExpansionSelectExpr>(expr)) {
+        if(const auto* implExpr = select->getImplExpr()) {
+            expr = IgnoreTransparentExprNodes(implExpr);
+        }
+    }
+
+    const auto* derefCall = dyn_cast<CXXOperatorCallExpr>(expr);
+    if((nullptr == derefCall) or (derefCall->getOperator() != OO_Star) or (1U != derefCall->getNumArgs())) {
+        return std::nullopt;
+    }
+
+    const auto* plusExpr = IgnoreTransparentExprNodes(derefCall->getArg(0));
+    const auto* plusCall = dyn_cast_or_null<CXXOperatorCallExpr>(plusExpr);
+    if((nullptr == plusCall) or (plusCall->getOperator() != OO_Plus) or (2U != plusCall->getNumArgs())) {
+        return std::nullopt;
+    }
+
+    const auto idx = TryEvaluateAsIndex(plusCall->getArg(1));
+    if(not idx) {
+        return std::nullopt;
+    }
+
+    const auto* beginExpr = IgnoreTransparentExprNodes(plusCall->getArg(0));
+    const auto* beginCall = dyn_cast_or_null<CXXMemberCallExpr>(beginExpr);
+    if((nullptr == beginCall) or (nullptr == beginCall->getMethodDecl()) or (beginCall->getMethodDecl()->getName() != "begin")) {
+        return std::nullopt;
+    }
+
+    const auto* rangeExpr = IgnoreTransparentExprNodes(beginCall->getImplicitObjectArgument());
+    const auto* rangeRef  = dyn_cast_or_null<DeclRefExpr>(rangeExpr);
+    const auto* rangeVar  = rangeRef ? dyn_cast_or_null<VarDecl>(rangeRef->getDecl()) : nullptr;
+    if(nullptr == rangeVar) {
+        return std::nullopt;
+    }
+
+    return std::pair{rangeVar, *idx};
+}
+//-----------------------------------------------------------------------------
+
+static std::optional<std::string> TryGetIdentifierFromExpansionRange(const VarDecl& rangeVar, const uint64_t idx)
+{
+    const auto* init = rangeVar.getInit();
+    const auto* call = dyn_cast_or_null<CallExpr>(IgnoreTransparentExprNodes(init));
+    if((nullptr == call) or not IsCallToNamedFunction(*call, "define_static_array") or (0U == call->getNumArgs())) {
+        return std::nullopt;
+    }
+
+    const auto* membersCall = dyn_cast_or_null<CallExpr>(IgnoreTransparentExprNodes(call->getArg(0)));
+    if((nullptr == membersCall) or not IsCallToNamedFunction(*membersCall, "nonstatic_data_members_of") or
+       (0U == membersCall->getNumArgs())) {
+        return std::nullopt;
+    }
+
+    const auto* reflectExpr = dyn_cast_or_null<CXXReflectExpr>(IgnoreTransparentExprNodes(membersCall->getArg(0)));
+    if((nullptr == reflectExpr) or reflectExpr->hasDependentSubExpr()) {
+        return std::nullopt;
+    }
+
+    const auto& reflection = reflectExpr->getReflection();
+    if(ReflectionKind::Type != reflection.getReflectionKind()) {
+        return std::nullopt;
+    }
+
+    const auto reflectedType = reflection.getReflectedType();
+    const auto* recordDecl   = reflectedType->getAsCXXRecordDecl();
+    if(nullptr == recordDecl) {
+        return std::nullopt;
+    }
+
+    uint64_t currentIdx{};
+    for(const auto* field : recordDecl->fields()) {
+        if(field->isImplicit()) {
+            continue;
+        }
+
+        if(currentIdx == idx) {
+            return field->getNameAsString();
+        }
+
+        ++currentIdx;
+    }
+
+    return std::nullopt;
+}
+//-----------------------------------------------------------------------------
+
+static std::optional<std::string> TryGetReflectedIdentifierName(const Expr* expr)
+{
+    if(nullptr == expr) {
+        return std::nullopt;
+    }
+
+    expr = IgnoreTransparentExprNodes(expr);
+
+    if(const auto* declRef = dyn_cast<DeclRefExpr>(expr)) {
+        if(const auto* varDecl = dyn_cast<VarDecl>(declRef->getDecl())) {
+            if(const auto selected = TryExtractExpansionRangeAndIndex(varDecl->getInit()); selected) {
+                if(const auto name = TryGetIdentifierFromExpansionRange(*selected->first, selected->second); name) {
+                    return name;
+                }
+            }
+
+            return TryGetReflectedIdentifierName(varDecl->getInit());
+        }
+    }
+
+    if(const auto* select = dyn_cast<CXXIterableExpansionSelectExpr>(expr)) {
+        return TryGetReflectedIdentifierName(select->getImplExpr());
+    }
+
+    if(const auto* reflectExpr = dyn_cast<CXXReflectExpr>(expr); reflectExpr and not reflectExpr->hasDependentSubExpr()) {
+        const auto& reflection = reflectExpr->getReflection();
+        if((ReflectionKind::Declaration == reflection.getReflectionKind()) or
+           (ReflectionKind::Type == reflection.getReflectionKind())) {
+            if(const auto* namedDecl = dyn_cast_or_null<NamedDecl>(reflection.getReflectedDecl())) {
+                return namedDecl->getNameAsString();
+            }
+        }
+    }
+
+    return std::nullopt;
+}
+//-----------------------------------------------------------------------------
+
+static bool HasNonFoldableReferenceToDecl(const Stmt* stmt, const ValueDecl* decl)
+{
+    if((nullptr == stmt) or (nullptr == decl)) {
+        return false;
+    }
+
+    if(const auto* callExpr = dyn_cast<CallExpr>(stmt)) {
+        if((1U == callExpr->getNumArgs()) and IsCallToNamedFunction(*callExpr, "identifier_of")) {
+            if(const auto name = TryGetReflectedIdentifierName(callExpr->getArg(0)); name) {
+                return false;
+            }
+        }
+    }
+
+    if(const auto* declRef = dyn_cast<DeclRefExpr>(stmt)) {
+        if(declRef->getDecl() == decl) {
+            return true;
+        }
+    }
+
+    for(const auto* child : stmt->children()) {
+        if((nullptr != child) and HasNonFoldableReferenceToDecl(child, decl)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+//-----------------------------------------------------------------------------
+
+static const Stmt* TryGetSimplifiedExpansionInstantiationBody(const Stmt* instantiation,
+                                                              const VarDecl* expansionVariable)
+{
+    const auto* compoundStmt = dyn_cast_or_null<CompoundStmt>(instantiation);
+    if((nullptr == compoundStmt) or (2U != compoundStmt->size())) {
+        return nullptr;
+    }
+
+    auto stmtIt = compoundStmt->body_begin();
+    const auto* firstStmt = *stmtIt++;
+    const auto* bodyStmt  = *stmtIt;
+
+    const auto* declStmt = dyn_cast_or_null<DeclStmt>(firstStmt);
+    if((nullptr == declStmt) or not declStmt->isSingleDecl()) {
+        return nullptr;
+    }
+
+    const auto* tempVarDecl = dyn_cast_or_null<VarDecl>(declStmt->getSingleDecl());
+    if(nullptr == tempVarDecl) {
+        return nullptr;
+    }
+
+    if((nullptr != expansionVariable) and (tempVarDecl->getName() != expansionVariable->getName())) {
+        return nullptr;
+    }
+
+    if(HasNonFoldableReferenceToDecl(bodyStmt, tempVarDecl)) {
+        return nullptr;
+    }
+
+    return bodyStmt;
+}
+//-----------------------------------------------------------------------------
+
+static bool TryCollectSimplifiedExpansionInstantiationBodies(const CXXExpansionStmt* stmt,
+                                                             SmallVectorImpl<const Stmt*>& out)
+{
+    if((nullptr == stmt) or (0U == stmt->getNumInstantiations())) {
+        return false;
+    }
+
+    out.clear();
+    out.reserve(stmt->getNumInstantiations());
+
+    for(unsigned idx = 0; idx < stmt->getNumInstantiations(); ++idx) {
+        const auto* instantiation = stmt->getInstantiation(idx);
+        if(nullptr == instantiation) {
+            continue;
+        }
+
+        const auto* simplifiedBody =
+            TryGetSimplifiedExpansionInstantiationBody(instantiation, stmt->getExpansionVariable());
+        if(nullptr == simplifiedBody) {
+            out.clear();
+            return false;
+        }
+
+        out.push_back(simplifiedBody);
+    }
+
+    return not out.empty();
+}
+//-----------------------------------------------------------------------------
+
 class ArrayInitCodeGenerator final : public CodeGenerator
 {
     const uint64_t mIndex;
@@ -1652,6 +1934,13 @@ void CodeGenerator::InsertArg(const CoreturnStmt* stmt)
 
 void CodeGenerator::InsertMethodBody(const FunctionDecl* stmt, const size_t posBeforeFunc)
 {
+    const bool inTemplateInstantiationBody{
+        stmt->isTemplateInstantiation() and stmt->isFunctionTemplateSpecialization()};
+    const bool previousTemplateInstantiationBody{
+        std::exchange(mProcessingTemplateInstantiationBody, inTemplateInstantiationBody)};
+    auto restoreTemplateInstantiationBody = [&] { mProcessingTemplateInstantiationBody = previousTemplateInstantiationBody; };
+    FinalAction<decltype(restoreTemplateInstantiationBody)> _{std::move(restoreTemplateInstantiationBody)};
+
     auto IsPrimaryTemplate = [&] {
         // For now, don't transform the primary template of a coroutine
         if(const auto* cxxMethod = dyn_cast_or_null<CXXMethodDecl>(stmt)) {
@@ -2411,6 +2700,10 @@ void CodeGenerator::InsertArg(const CXXIndeterminateExpansionSelectExpr* stmt)
 
 void CodeGenerator::InsertArg(const CXXIterableExpansionStmt* stmt)
 {
+    if(TryInsertCollapsedExpansionInstantiations(stmt)) {
+        return;
+    }
+
     // Output: template for (var : range) { body }
     mOutputFormatHelper.Append("template for(");
 
@@ -2448,6 +2741,10 @@ void CodeGenerator::InsertArg(const CXXIterableExpansionStmt* stmt)
 
 void CodeGenerator::InsertArg(const CXXIndeterminateExpansionStmt* stmt)
 {
+    if(TryInsertCollapsedExpansionInstantiations(stmt)) {
+        return;
+    }
+
     mOutputFormatHelper.Append("template for(");
     if(const auto* varDecl = stmt->getExpansionVariable()) {
         mOutputFormatHelper.Append("constexpr auto ");
@@ -2474,6 +2771,10 @@ void CodeGenerator::InsertArg(const CXXIndeterminateExpansionStmt* stmt)
 
 void CodeGenerator::InsertArg(const CXXDestructurableExpansionStmt* stmt)
 {
+    if(TryInsertCollapsedExpansionInstantiations(stmt)) {
+        return;
+    }
+
     mOutputFormatHelper.Append("template for(");
     if(const auto* varDecl = stmt->getExpansionVariable()) {
         mOutputFormatHelper.Append("constexpr auto ");
@@ -2500,6 +2801,10 @@ void CodeGenerator::InsertArg(const CXXDestructurableExpansionStmt* stmt)
 
 void CodeGenerator::InsertArg(const CXXInitListExpansionStmt* stmt)
 {
+    if(TryInsertCollapsedExpansionInstantiations(stmt)) {
+        return;
+    }
+
     mOutputFormatHelper.Append("template for(");
     if(const auto* varDecl = stmt->getExpansionVariable()) {
         mOutputFormatHelper.Append("constexpr auto ");
@@ -2646,6 +2951,32 @@ void CodeGenerator::InsertArg(const OpaqueValueExpr* stmt)
 
 void CodeGenerator::InsertArg(const CallExpr* stmt)
 {
+    if(1U == stmt->getNumArgs()) {
+        const bool isIdentifierOfCall{[&] {
+            if(const auto* namedDecl = dyn_cast_or_null<NamedDecl>(stmt->getCalleeDecl())) {
+                return namedDecl->getName() == "identifier_of";
+            }
+
+            const auto* callee = stmt->getCallee()->IgnoreParenImpCasts();
+            if(const auto* declRef = dyn_cast_or_null<DeclRefExpr>(callee)) {
+                return declRef->getNameInfo().getAsString() == "identifier_of";
+            }
+
+            if(const auto* unresolved = dyn_cast_or_null<UnresolvedLookupExpr>(callee)) {
+                return unresolved->getName().getAsString() == "identifier_of";
+            }
+
+            return false;
+        }()};
+
+        if(isIdentifierOfCall) {
+            if(const auto name = TryGetReflectedIdentifierName(stmt->getArg(0)); name) {
+                mOutputFormatHelper.Append("\""sv, *name, "\""sv);
+                return;
+            }
+        }
+    }
+
     const bool insideDecltype{InsideDecltype()};
 
     CONDITIONAL_LAMBDA_SCOPE_HELPER(CallExpr, not insideDecltype)
@@ -2937,9 +3268,107 @@ void CodeGenerator::InsertExpansionInstantiations(const CXXExpansionStmt* stmt, 
 }
 //-----------------------------------------------------------------------------
 
+bool CodeGenerator::TryInsertCollapsedExpansionInstantiations(const CXXExpansionStmt* stmt)
+{
+    if((not mProcessingTemplateInstantiationBody) or (nullptr == stmt) or (0U == stmt->getNumInstantiations())) {
+        return false;
+    }
+
+    SmallVector<const Stmt*, 8> simplifiedInstantiations{};
+    if(TryCollectSimplifiedExpansionInstantiationBodies(stmt, simplifiedInstantiations)) {
+        for(const auto* simplifiedBody : simplifiedInstantiations) {
+            mOutputFormatHelper.InsertIfDefTemplateGuard();
+
+            if(const auto* compoundStmt = dyn_cast<CompoundStmt>(simplifiedBody)) {
+                HandleCompoundStmt(compoundStmt);
+            } else {
+                InsertArg(simplifiedBody);
+
+                if(IsStmtRequiringSemi<IfStmt,
+                                       NullStmt,
+                                       ForStmt,
+                                       DeclStmt,
+                                       WhileStmt,
+                                       DoStmt,
+                                       CXXForRangeStmt,
+                                       SwitchStmt,
+                                       CXXTryStmt,
+                                       CppInsightsCommentStmt,
+                                       CompoundStmt>(simplifiedBody) and
+                   InsertSemi() and not mSkipSemi) {
+                    mOutputFormatHelper.AppendSemiNewLine();
+                } else {
+                    mOutputFormatHelper.AppendNewLine();
+                }
+            }
+
+            mSkipSemi = false;
+            mOutputFormatHelper.InsertEndIfTemplateGuard();
+        }
+
+        return true;
+    }
+
+    mOutputFormatHelper.AppendNewLine();
+    WrapInCurlys([&] {
+        mOutputFormatHelper.AppendNewLine();
+        mOutputFormatHelper.Append("  constexpr const auto __range = "sv);
+
+        if(const auto* rangeExpr = ExtractExpansionRangeExprFromVar(stmt)) {
+            InsertArg(rangeExpr);
+        } else if(const auto* rangeExpr = ExtractExpansionRangeExpr(stmt)) {
+            InsertArg(rangeExpr);
+        } else if(const auto* tparamRef = stmt->getTParamRef()) {
+            InsertArg(tparamRef);
+        } else {
+            mOutputFormatHelper.Append("/* indeterminate expansion range */"sv);
+        }
+
+        mOutputFormatHelper.AppendSemiNewLine();
+        InsertExpansionInstantiations(stmt, stmt->getNumInstantiations());
+    });
+    mOutputFormatHelper.AppendNewLine();
+
+    return true;
+}
+//-----------------------------------------------------------------------------
+
 void CodeGenerator::HandleCompoundStmt(const CompoundStmt* stmt)
 {
-    for(const auto* item : stmt->body()) {
+    SmallVector<const Stmt*, 16> bodyItems(stmt->body_begin(), stmt->body_end());
+
+    for(size_t idx = 0; idx < bodyItems.size(); ++idx) {
+        const auto* item = bodyItems[idx];
+
+        if(mProcessingTemplateInstantiationBody and (idx + 1U < bodyItems.size())) {
+            const auto* declStmt = dyn_cast_or_null<DeclStmt>(item);
+            const auto* nextDeclStmt = dyn_cast_or_null<DeclStmt>(bodyItems[idx + 1U]);
+
+            const auto* varDecl = (declStmt and declStmt->isSingleDecl()) ? dyn_cast_or_null<VarDecl>(declStmt->getSingleDecl())
+                                                                          : nullptr;
+            const auto* expansionDecl =
+                (nextDeclStmt and nextDeclStmt->isSingleDecl()) ? dyn_cast_or_null<ExpansionStmtDecl>(nextDeclStmt->getSingleDecl())
+                                                                : nullptr;
+            const auto* expansionStmt = expansionDecl ? expansionDecl->getStmt() : nullptr;
+
+            if(varDecl and expansionStmt) {
+                SmallVector<const Stmt*, 8> simplifiedInstantiations{};
+                if(TryCollectSimplifiedExpansionInstantiationBodies(expansionStmt, simplifiedInstantiations)) {
+                    bool referencedLater{};
+                    for(size_t laterIdx = idx + 2U; laterIdx < bodyItems.size(); ++laterIdx) {
+                        if(HasNonFoldableReferenceToDecl(bodyItems[laterIdx], varDecl)) {
+                            referencedLater = true;
+                            break;
+                        }
+                    }
+
+                    if(not referencedLater) {
+                        continue;
+                    }
+                }
+            }
+        }
+
         InsertArg(item);
 
         // Skip inserting a semicolon, if this is a LambdaExpr and out stack is empty. This addresses a special case
