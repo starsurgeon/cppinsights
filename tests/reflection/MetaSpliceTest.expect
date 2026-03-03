@@ -1,0 +1,26 @@
+namespace Ns
+{
+  int v = 7;
+  enum class Color : int
+  {
+    red, 
+    blue
+  };
+  
+  
+}
+
+int value()
+{
+  return Ns::v;
+}
+
+Ns::Color color()
+{
+  return Ns::Color::blue;
+}
+
+int main()
+{
+  return static_cast<int>((value() == 7) && (color() == Ns::Color::blue));
+}

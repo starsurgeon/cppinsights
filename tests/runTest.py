@@ -58,7 +58,7 @@ def testCompare(tmpFileName, stdout, expectFile, f, args, time):
     return False
 #------------------------------------------------------------------------------
 
-def testCompile(tmpFileName, f, args, fileName, cppStd):
+def testCompile(tmpFileName, f, args, fileName, cppStd, compileOpts):
     if os.name == 'nt':
         cppStd = cppStd.replace('-std=', '/std:')
         cppStd = cppStd.replace('2a', 'latest')
@@ -75,6 +75,9 @@ def testCompile(tmpFileName, f, args, fileName, cppStd):
     # GCC seems to dislike empty ''
     if '-std=c++98' == cppStd:
         cmd += ['-Dalignas(x)=']
+
+    if len(compileOpts):
+        cmd.extend(compileOpts)
 
     cmd += ['-c', tmpFileName]
 
@@ -150,6 +153,7 @@ def main():
 
     regEx         = re.compile('.*cmdline:(.*)')
     regExInsights = re.compile('.*cmdlineinsights:(.*)')
+    regExCompile  = re.compile('.*cmdlinecompile:(.*)')
 
     for f in sorted(cppFiles):
         fileName     = os.path.splitext(f)[0]
@@ -157,17 +161,22 @@ def main():
         ignoreFile   = os.path.join(mypath, fileName + '.ignore')
         cppStd       = defaultCppStd
         insightsOpts = ''
+        compileOpts  = []
 
         fh = open(f, 'r', encoding='utf-8')
-        fileHeader = fh.readline()
-        fileHeader += fh.readline()
-        m = regEx.search(fileHeader)
-        if m is not None:
-            cppStd = m.group(1)
+        fileHeader = [fh.readline() for _ in range(5)]
+        for headerLine in fileHeader:
+            m = regEx.search(headerLine)
+            if m is not None:
+                cppStd = m.group(1)
 
-        m = regExInsights.search(fileHeader)
-        if m is not None:
-            insightsOpts = m.group(1).split(' ')
+            m = regExInsights.search(headerLine)
+            if m is not None:
+                insightsOpts = m.group(1).split(' ')
+
+            m = regExCompile.search(headerLine)
+            if m is not None:
+                compileOpts = [opt for opt in m.group(1).split(' ') if opt]
 
         if not os.path.isfile(expectFile) and not os.path.isfile(ignoreFile):
             print(f'Missing expect/ignore for: {f}')
@@ -229,7 +238,7 @@ def main():
                 tmp.write(stdout)
 
             equal = testCompare(tmpFileName, stdout, expectFile, f, args, end-begin)
-            bCompiles, stderr = testCompile(tmpFileName, f, args, fileName, cppStd)
+            bCompiles, stderr = testCompile(tmpFileName, f, args, fileName, cppStd, compileOpts)
             compileErrorFile = os.path.join(mypath, fileName + '.cerr')
 
 

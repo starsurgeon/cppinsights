@@ -1,0 +1,10 @@
+template<class type_parameter_0_0>
+inline consteval auto forward(type_parameter_0_0 r)
+{
+  return __metafunction(0, r, ^^int);
+}
+
+int main()
+{
+  return 0;
+}

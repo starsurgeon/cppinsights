@@ -657,6 +657,15 @@ if (NOT Python3_FOUND)
 else()
     message(STATUS "Found Python3: ${Python3_EXECUTABLE}. Target tests enabled.")
 
+    set(REFLECTION_TEST_FILES
+        reflection/ReflectionSpliceTest.cpp
+        reflection/MetaNamesTest.cpp
+        reflection/MetaPredicatesTest.cpp
+        reflection/MetaSpliceTest.cpp
+        reflection/MetaTransformsTest.cpp
+        reflection/MetafunctionIntrinsicTest.cpp
+    )
+
     # add a target to generate run tests
     add_custom_target(tests
         COMMAND cmake -E rm -rf ${CMAKE_CURRENT_BINARY_DIR}/llvmprof/
@@ -668,6 +677,18 @@ else()
         DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/$<TARGET_FILE_NAME:insights> ${CMAKE_CURRENT_SOURCE_DIR}/tests/runTest.py ${CMAKE_CURRENT_SOURCE_DIR}/tests/shell/test-bash-completion.sh
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tests
         COMMENT "Running tests" VERBATIM
+    )
+
+    add_custom_target(reflection-tests
+        COMMAND cmake -E env
+        CLANGXX_BIN=/home/amue/clang-p2996-bin/bin/clang++
+        LIBCXX_HEADERS=${CMAKE_CURRENT_SOURCE_DIR}/../clang-p2996/libcxx/include
+        ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/runTest.py --insights
+        $<TARGET_FILE:insights> --cxx ${CMAKE_CURRENT_SOURCE_DIR}/scripts/clangxx-libcxx-wrapper.sh
+        ${TEST_FAILURE_IS_OK} ${REFLECTION_TEST_FILES}
+        DEPENDS insights ${CMAKE_CURRENT_SOURCE_DIR}/tests/runTest.py
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tests
+        COMMENT "Running reflection tests" VERBATIM
     )
 endif()
 

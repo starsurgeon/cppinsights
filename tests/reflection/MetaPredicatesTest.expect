@@ -1,0 +1,175 @@
+template<class type_parameter_0_0>
+inline consteval bool has_identifier(type_parameter_0_0)
+{
+  return true;
+}
+
+/* First instantiated from: MetaPredicatesTest.cpp:68 */
+#ifdef INSIGHTS_USE_TEMPLATE
+template<>
+inline consteval bool has_identifier<meta::info>(meta::info)
+{
+  return true;
+}
+#endif
+
+
+template<class type_parameter_0_0>
+inline consteval bool is_public(type_parameter_0_0)
+{
+  return true;
+}
+
+/* First instantiated from: MetaPredicatesTest.cpp:69 */
+#ifdef INSIGHTS_USE_TEMPLATE
+template<>
+inline consteval bool is_public<meta::info>(meta::info)
+{
+  return true;
+}
+#endif
+
+
+template<class type_parameter_0_0>
+inline consteval bool is_function(type_parameter_0_0)
+{
+  return true;
+}
+
+/* First instantiated from: MetaPredicatesTest.cpp:70 */
+#ifdef INSIGHTS_USE_TEMPLATE
+template<>
+inline consteval bool is_function<meta::info>(meta::info)
+{
+  return true;
+}
+#endif
+
+
+template<class type_parameter_0_0>
+inline consteval bool is_variable(type_parameter_0_0)
+{
+  return true;
+}
+
+/* First instantiated from: MetaPredicatesTest.cpp:71 */
+#ifdef INSIGHTS_USE_TEMPLATE
+template<>
+inline consteval bool is_variable<meta::info>(meta::info)
+{
+  return true;
+}
+#endif
+
+
+template<class type_parameter_0_0>
+inline consteval bool is_type(type_parameter_0_0)
+{
+  return true;
+}
+
+/* First instantiated from: MetaPredicatesTest.cpp:72 */
+#ifdef INSIGHTS_USE_TEMPLATE
+template<>
+inline consteval bool is_type<meta::info>(meta::info)
+{
+  return true;
+}
+#endif
+
+
+template<class type_parameter_0_0>
+inline consteval bool is_class_type(type_parameter_0_0)
+{
+  return true;
+}
+
+/* First instantiated from: MetaPredicatesTest.cpp:73 */
+#ifdef INSIGHTS_USE_TEMPLATE
+template<>
+inline consteval bool is_class_type<meta::info>(meta::info)
+{
+  return true;
+}
+#endif
+
+
+template<class type_parameter_0_0>
+inline consteval bool is_enum_type(type_parameter_0_0)
+{
+  return true;
+}
+
+/* First instantiated from: MetaPredicatesTest.cpp:74 */
+#ifdef INSIGHTS_USE_TEMPLATE
+template<>
+inline consteval bool is_enum_type<meta::info>(meta::info)
+{
+  return true;
+}
+#endif
+
+
+template<class type_parameter_0_0>
+inline consteval bool is_complete_type(type_parameter_0_0)
+{
+  return true;
+}
+
+/* First instantiated from: MetaPredicatesTest.cpp:75 */
+#ifdef INSIGHTS_USE_TEMPLATE
+template<>
+inline consteval bool is_complete_type<meta::info>(meta::info)
+{
+  return true;
+}
+#endif
+
+
+template<class type_parameter_0_0>
+inline consteval bool has_linkage(type_parameter_0_0)
+{
+  return true;
+}
+
+/* First instantiated from: MetaPredicatesTest.cpp:76 */
+#ifdef INSIGHTS_USE_TEMPLATE
+template<>
+inline consteval bool has_linkage<meta::info>(meta::info)
+{
+  return true;
+}
+#endif
+
+
+namespace Ns
+{
+  int fn()
+  {
+    return 42;
+  }
+  
+}
+
+int v = 0;
+
+struct Foo
+{
+};
+
+
+enum class Color : int
+{
+  red
+};
+
+
+inline consteval bool check_entities()
+{
+  return (((((((has_identifier(^^v) && is_public(^^v)) && is_function(^^Ns::fn)) && is_variable(^^v)) && is_type(^^Foo)) && is_class_type(^^Foo)) && is_enum_type(^^Color)) && is_complete_type(^^Foo)) && has_linkage(^^v);
+}
+
+int main()
+{
+  return static_cast<int>(check_entities());
+}

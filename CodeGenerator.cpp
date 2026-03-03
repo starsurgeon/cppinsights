@@ -143,6 +143,300 @@ static bool IsCallToNamedFunction(const CallExpr& call, std::string_view name)
 }
 //-----------------------------------------------------------------------------
 
+enum class MetafunctionBehavior
+{
+    NotP2996,
+    NameLike,
+    DeclRange,
+    DeclReturning,
+    Passthrough,
+};
+//-----------------------------------------------------------------------------
+
+static std::optional<std::string> TryGetMetafunctionName(const CallExpr& call)
+{
+    if(const auto* namedDecl = dyn_cast_or_null<NamedDecl>(call.getCalleeDecl())) {
+        return namedDecl->getNameAsString();
+    }
+
+    const auto* callee = call.getCallee()->IgnoreParenImpCasts();
+    if(const auto* declRef = dyn_cast_or_null<DeclRefExpr>(callee)) {
+        if(const auto* namedDecl = dyn_cast_or_null<NamedDecl>(declRef->getDecl())) {
+            return namedDecl->getNameAsString();
+        }
+    }
+
+    if(const auto* unresolved = dyn_cast_or_null<UnresolvedLookupExpr>(callee)) {
+        return unresolved->getName().getAsString();
+    }
+
+    return std::nullopt;
+}
+//-----------------------------------------------------------------------------
+
+static MetafunctionBehavior GetMetafunctionBehavior(std::string_view name)
+{
+    constexpr std::string_view nameLikeMetafunctions[] = {
+        "identifier_of"sv,
+        "display_string_of"sv,
+        "u8identifier_of"sv,
+        "u8display_string_of"sv,
+    };
+
+    if(ranges::find(nameLikeMetafunctions, name) != std::end(nameLikeMetafunctions)) {
+        return MetafunctionBehavior::NameLike;
+    }
+
+    constexpr std::string_view declRangeMetafunctions[] = {
+        "members_of"sv,
+        "bases_of"sv,
+        "static_data_members_of"sv,
+        "nonstatic_data_members_of"sv,
+        "enumerators_of"sv,
+    };
+
+    if(ranges::find(declRangeMetafunctions, name) != std::end(declRangeMetafunctions)) {
+        return MetafunctionBehavior::DeclRange;
+    }
+
+    constexpr std::string_view declReturningMetafunctions[] = {
+        "parent_of"sv,
+        "object_of"sv,
+        "constant_of"sv,
+        "template_of"sv,
+    };
+
+    if(ranges::find(declReturningMetafunctions, name) != std::end(declReturningMetafunctions)) {
+        return MetafunctionBehavior::DeclReturning;
+    }
+
+    constexpr std::string_view p2996Metafunctions[] = {
+        "identifier_of"sv,
+        "display_string_of"sv,
+        "u8identifier_of"sv,
+        "u8display_string_of"sv,
+        "has_identifier"sv,
+        "operator_of"sv,
+        "source_location_of"sv,
+        "type_of"sv,
+        "parent_of"sv,
+        "dealias"sv,
+        "object_of"sv,
+        "constant_of"sv,
+        "template_of"sv,
+        "template_arguments_of"sv,
+        "members_of"sv,
+        "bases_of"sv,
+        "static_data_members_of"sv,
+        "nonstatic_data_members_of"sv,
+        "enumerators_of"sv,
+        "can_substitute"sv,
+        "substitute"sv,
+        "reflect_constant"sv,
+        "reflect_object"sv,
+        "reflect_function"sv,
+        "extract"sv,
+        "is_public"sv,
+        "is_protected"sv,
+        "is_private"sv,
+        "is_virtual"sv,
+        "is_pure_virtual"sv,
+        "is_override"sv,
+        "is_deleted"sv,
+        "is_defaulted"sv,
+        "is_explicit"sv,
+        "is_noexcept"sv,
+        "is_bit_field"sv,
+        "is_enumerator"sv,
+        "is_const"sv,
+        "is_volatile"sv,
+        "is_mutable_member"sv,
+        "is_lvalue_reference_qualified"sv,
+        "is_rvalue_reference_qualified"sv,
+        "has_static_storage_duration"sv,
+        "has_thread_storage_duration"sv,
+        "has_automatic_storage_duration"sv,
+        "has_internal_linkage"sv,
+        "has_module_linkage"sv,
+        "has_external_linkage"sv,
+        "has_linkage"sv,
+        "is_class_member"sv,
+        "is_namespace_member"sv,
+        "is_nonstatic_data_member"sv,
+        "is_static_member"sv,
+        "is_base"sv,
+        "is_data_member_spec"sv,
+        "is_namespace"sv,
+        "is_function"sv,
+        "is_variable"sv,
+        "is_type"sv,
+        "is_type_alias"sv,
+        "is_namespace_alias"sv,
+        "is_complete_type"sv,
+        "is_enumerable_type"sv,
+        "is_template"sv,
+        "is_function_template"sv,
+        "is_variable_template"sv,
+        "is_class_template"sv,
+        "is_alias_template"sv,
+        "is_conversion_function_template"sv,
+        "is_operator_function_template"sv,
+        "is_literal_operator_template"sv,
+        "is_constructor_template"sv,
+        "is_concept"sv,
+        "is_structured_binding"sv,
+        "has_template_arguments"sv,
+        "has_default_member_initializer"sv,
+        "is_conversion_function"sv,
+        "is_operator_function"sv,
+        "is_literal_operator"sv,
+        "is_constructor"sv,
+        "is_default_constructor"sv,
+        "is_copy_constructor"sv,
+        "is_move_constructor"sv,
+        "is_assignment"sv,
+        "is_copy_assignment"sv,
+        "is_move_assignment"sv,
+        "is_destructor"sv,
+        "is_special_member_function"sv,
+        "is_user_provided"sv,
+        "is_user_declared"sv,
+        "data_member_spec"sv,
+        "define_aggregate"sv,
+        "offset_of"sv,
+        "size_of"sv,
+        "alignment_of"sv,
+        "bit_size_of"sv,
+        "is_void_type"sv,
+        "is_null_pointer_type"sv,
+        "is_integral_type"sv,
+        "is_floating_point_type"sv,
+        "is_array_type"sv,
+        "is_pointer_type"sv,
+        "is_lvalue_reference_type"sv,
+        "is_rvalue_reference_type"sv,
+        "is_member_object_pointer_type"sv,
+        "is_member_function_pointer_type"sv,
+        "is_enum_type"sv,
+        "is_union_type"sv,
+        "is_class_type"sv,
+        "is_function_type"sv,
+        "is_reference_type"sv,
+        "is_arithmetic_type"sv,
+        "is_fundamental_type"sv,
+        "is_object_type"sv,
+        "is_scalar_type"sv,
+        "is_compound_type"sv,
+        "is_member_pointer_type"sv,
+        "is_const_type"sv,
+        "is_volatile_type"sv,
+        "is_trivial_type"sv,
+        "is_trivially_copyable_type"sv,
+        "is_standard_layout_type"sv,
+        "is_empty_type"sv,
+        "is_polymorphic_type"sv,
+        "is_abstract_type"sv,
+        "is_final_type"sv,
+        "is_aggregate_type"sv,
+        "is_consteval_only_type"sv,
+        "is_signed_type"sv,
+        "is_unsigned_type"sv,
+        "is_bounded_array_type"sv,
+        "is_unbounded_array_type"sv,
+        "is_scoped_enum_type"sv,
+        "is_constructible_type"sv,
+        "is_default_constructible_type"sv,
+        "is_copy_constructible_type"sv,
+        "is_move_constructible_type"sv,
+        "is_assignable_type"sv,
+        "is_copy_assignable_type"sv,
+        "is_move_assignable_type"sv,
+        "is_swappable_with_type"sv,
+        "is_swappable_type"sv,
+        "is_destructible_type"sv,
+        "type_is_trivially_constructible"sv,
+        "is_trivially_default_constructible_type"sv,
+        "is_trivially_copy_constructible_type"sv,
+        "is_trivially_move_constructible_type"sv,
+        "is_trivially_assignable_type"sv,
+        "is_trivially_copy_assignable_type"sv,
+        "is_trivially_move_assignable_type"sv,
+        "is_trivially_destructible_type"sv,
+        "is_nothrow_constructible_type"sv,
+        "is_nothrow_default_constructible_type"sv,
+        "is_nothrow_copy_constructible_type"sv,
+        "is_nothrow_move_constructible_type"sv,
+        "is_nothrow_assignable_type"sv,
+        "is_nothrow_copy_assignable_type"sv,
+        "is_nothrow_move_assignable_type"sv,
+        "is_nothrow_swappable_with_type"sv,
+        "is_nothrow_swappable_type"sv,
+        "is_nothrow_destructible_type"sv,
+        "is_implicit_lifetime_type"sv,
+        "has_virtual_destructor"sv,
+        "has_unique_object_representations"sv,
+        "reference_constructs_from_temporary"sv,
+        "reference_converts_from_temporary"sv,
+        "rank"sv,
+        "extent"sv,
+        "is_same_type"sv,
+        "is_base_of_type"sv,
+        "is_convertible_type"sv,
+        "is_nothrow_convertible_type"sv,
+        "is_layout_compatible_type"sv,
+        "is_pointer_interconvertible_base_of_type"sv,
+        "is_invocable_type"sv,
+        "is_invocable_r_type"sv,
+        "is_nothrow_invocable_type"sv,
+        "is_nothrow_invocable_r_type"sv,
+        "remove_const"sv,
+        "remove_volatile"sv,
+        "remove_cv"sv,
+        "add_const"sv,
+        "add_volatile"sv,
+        "add_cv"sv,
+        "remove_reference"sv,
+        "add_lvalue_reference"sv,
+        "add_rvalue_reference"sv,
+        "make_signed"sv,
+        "make_unsigned"sv,
+        "remove_extent"sv,
+        "remove_all_extents"sv,
+        "remove_pointer"sv,
+        "add_pointer"sv,
+        "remove_cvref"sv,
+        "decay"sv,
+        "common_type"sv,
+        "common_reference"sv,
+        "underlying_type"sv,
+        "invoke_result"sv,
+        "unwrap_reference"sv,
+        "unwrap_ref_decay"sv,
+        "tuple_size"sv,
+        "tuple_element"sv,
+        "variant_size"sv,
+        "variant_alternative"sv,
+        "is_entity_proxy"sv,
+    };
+
+    if(ranges::find(p2996Metafunctions, name) != std::end(p2996Metafunctions)) {
+        return MetafunctionBehavior::Passthrough;
+    }
+
+    return MetafunctionBehavior::NotP2996;
+}
+//-----------------------------------------------------------------------------
+
+static bool IsMetafunctionCall(const CallExpr& call)
+{
+    if(const auto name = TryGetMetafunctionName(call); name) {
+        return MetafunctionBehavior::NotP2996 != GetMetafunctionBehavior(*name);
+    }
+
+    return false;
+}
+//-----------------------------------------------------------------------------
+
 static std::optional<uint64_t> TryEvaluateAsIndex(const Expr* expr);
 //-----------------------------------------------------------------------------
 
@@ -243,13 +537,88 @@ static const NamedDecl* TryGetReflectedNamedDeclFromExpansionRange(const VarDecl
         return nullptr;
     }
 
+    const auto name = TryGetMetafunctionName(*reflectedCall);
+    if(not name) {
+        return nullptr;
+    }
+
     const auto& reflection = reflectExpr->getReflection();
-    if(IsCallToNamedFunction(*reflectedCall, "nonstatic_data_members_of")) {
-        if(ReflectionKind::Type != reflection.getReflectionKind()) {
+    if(ReflectionKind::Type != reflection.getReflectionKind()) {
+        return nullptr;
+    }
+
+    const auto reflectedType = reflection.getReflectedType();
+
+    if(*name == "members_of"sv) {
+        const auto* recordDecl = reflectedType->getAsCXXRecordDecl();
+        if(nullptr == recordDecl) {
             return nullptr;
         }
 
-        const auto reflectedType = reflection.getReflectedType();
+        uint64_t currentIdx{};
+        for(const auto* decl : recordDecl->decls()) {
+            const auto* namedDecl = dyn_cast_or_null<NamedDecl>(decl);
+            if((nullptr == namedDecl) or namedDecl->isImplicit()) {
+                continue;
+            }
+
+            if(currentIdx == idx) {
+                return namedDecl;
+            }
+
+            ++currentIdx;
+        }
+
+        return nullptr;
+    }
+
+    if(*name == "bases_of"sv) {
+        const auto* recordDecl = reflectedType->getAsCXXRecordDecl();
+        if(nullptr == recordDecl) {
+            return nullptr;
+        }
+
+        uint64_t currentIdx{};
+        for(const auto& base : recordDecl->bases()) {
+            const auto* baseDecl = dyn_cast_or_null<NamedDecl>(base.getType()->getAsTagDecl());
+            if(nullptr == baseDecl) {
+                continue;
+            }
+
+            if(currentIdx == idx) {
+                return baseDecl;
+            }
+
+            ++currentIdx;
+        }
+
+        return nullptr;
+    }
+
+    if(*name == "static_data_members_of"sv) {
+        const auto* recordDecl = reflectedType->getAsCXXRecordDecl();
+        if(nullptr == recordDecl) {
+            return nullptr;
+        }
+
+        uint64_t currentIdx{};
+        for(const auto* decl : recordDecl->decls()) {
+            const auto* varDecl = dyn_cast_or_null<VarDecl>(decl);
+            if((nullptr == varDecl) or varDecl->isImplicit() or not varDecl->isStaticDataMember()) {
+                continue;
+            }
+
+            if(currentIdx == idx) {
+                return varDecl;
+            }
+
+            ++currentIdx;
+        }
+
+        return nullptr;
+    }
+
+    if(*name == "nonstatic_data_members_of"sv) {
         const auto* recordDecl   = reflectedType->getAsCXXRecordDecl();
         if(nullptr == recordDecl) {
             return nullptr;
@@ -271,12 +640,7 @@ static const NamedDecl* TryGetReflectedNamedDeclFromExpansionRange(const VarDecl
         return nullptr;
     }
 
-    if(IsCallToNamedFunction(*reflectedCall, "enumerators_of")) {
-        if(ReflectionKind::Type != reflection.getReflectionKind()) {
-            return nullptr;
-        }
-
-        const auto reflectedType = reflection.getReflectedType();
+    if(*name == "enumerators_of"sv) {
         const auto* enumDecl     = dyn_cast_or_null<EnumDecl>(reflectedType->getAsTagDecl());
         if(nullptr == enumDecl) {
             return nullptr;
@@ -289,6 +653,66 @@ static const NamedDecl* TryGetReflectedNamedDeclFromExpansionRange(const VarDecl
             }
 
             ++currentIdx;
+        }
+    }
+
+    return nullptr;
+}
+//-----------------------------------------------------------------------------
+
+static const NamedDecl* TryGetReflectedNamedDecl(const Expr* expr);
+//-----------------------------------------------------------------------------
+
+static const NamedDecl* TryGetTemplateNamedDecl(const NamedDecl* namedDecl)
+{
+    if(nullptr == namedDecl) {
+        return nullptr;
+    }
+
+    if(const auto* classSpecialization = dyn_cast<ClassTemplateSpecializationDecl>(namedDecl)) {
+        if(const auto* tmpl = classSpecialization->getSpecializedTemplate()) {
+            return tmpl->getTemplatedDecl();
+        }
+    }
+
+    if(const auto* functionDecl = dyn_cast<FunctionDecl>(namedDecl)) {
+        if(const auto* tmpl = functionDecl->getPrimaryTemplate()) {
+            return tmpl;
+        }
+    }
+
+    if(const auto* varTemplateSpecialization = dyn_cast<VarTemplateSpecializationDecl>(namedDecl)) {
+        if(const auto* tmpl = varTemplateSpecialization->getSpecializedTemplate()) {
+            return tmpl->getTemplatedDecl();
+        }
+    }
+
+    return nullptr;
+}
+//-----------------------------------------------------------------------------
+
+static const NamedDecl* TryGetDeclReturningMetafunctionDecl(std::string_view name, const Expr* expr)
+{
+    const auto* namedDecl = TryGetReflectedNamedDecl(expr);
+    if(nullptr == namedDecl) {
+        return nullptr;
+    }
+
+    if(name == "parent_of"sv) {
+        return dyn_cast_or_null<NamedDecl>(namedDecl->getDeclContext());
+    }
+
+    if(name == "template_of"sv) {
+        return TryGetTemplateNamedDecl(namedDecl);
+    }
+
+    if(name == "object_of"sv) {
+        return dyn_cast_or_null<ValueDecl>(namedDecl);
+    }
+
+    if(name == "constant_of"sv) {
+        if(isa<EnumConstantDecl>(namedDecl)) {
+            return namedDecl;
         }
     }
 
@@ -320,6 +744,15 @@ static const NamedDecl* TryGetReflectedNamedDecl(const Expr* expr)
         return TryGetReflectedNamedDecl(select->getImplExpr());
     }
 
+    if(const auto* callExpr = dyn_cast<CallExpr>(expr)) {
+        if(1U == callExpr->getNumArgs()) {
+            if(const auto name = TryGetMetafunctionName(*callExpr); name and
+               (MetafunctionBehavior::DeclReturning == GetMetafunctionBehavior(*name))) {
+                return TryGetDeclReturningMetafunctionDecl(*name, callExpr->getArg(0));
+            }
+        }
+    }
+
     if(const auto* reflectExpr = dyn_cast<CXXReflectExpr>(expr); reflectExpr and not reflectExpr->hasDependentSubExpr()) {
         const auto& reflection = reflectExpr->getReflection();
         if(ReflectionKind::Declaration == reflection.getReflectionKind()) {
@@ -328,18 +761,6 @@ static const NamedDecl* TryGetReflectedNamedDecl(const Expr* expr)
     }
 
     return nullptr;
-}
-//-----------------------------------------------------------------------------
-
-static std::optional<std::string> TryGetReflectedIdentifierName(const Expr* expr)
-{
-    if(const auto* namedDecl = TryGetReflectedNamedDecl(expr)) {
-        if(not namedDecl->getName().empty()) {
-            return namedDecl->getNameAsString();
-        }
-    }
-
-    return std::nullopt;
 }
 //-----------------------------------------------------------------------------
 
@@ -355,6 +776,32 @@ static std::string GetReflectedSpliceName(const NamedDecl& namedDecl)
 }
 //-----------------------------------------------------------------------------
 
+static std::optional<std::string> TryGetReflectedName(const Expr* expr, const bool qualified)
+{
+    if(const auto* namedDecl = TryGetReflectedNamedDecl(expr)) {
+        if(namedDecl->getName().empty()) {
+            return std::nullopt;
+        }
+
+        return qualified ? GetReflectedSpliceName(*namedDecl) : namedDecl->getNameAsString();
+    }
+
+    return std::nullopt;
+}
+//-----------------------------------------------------------------------------
+
+static std::optional<std::string> TryGetReflectedIdentifierName(const Expr* expr)
+{
+    return TryGetReflectedName(expr, false);
+}
+//-----------------------------------------------------------------------------
+
+static std::optional<std::string> TryGetReflectedDisplayName(const Expr* expr)
+{
+    return TryGetReflectedName(expr, true);
+}
+//-----------------------------------------------------------------------------
+
 static bool HasNonFoldableReferenceToDecl(const Stmt* stmt, const ValueDecl* decl)
 {
     if((nullptr == stmt) or (nullptr == decl)) {
@@ -362,9 +809,12 @@ static bool HasNonFoldableReferenceToDecl(const Stmt* stmt, const ValueDecl* dec
     }
 
     if(const auto* callExpr = dyn_cast<CallExpr>(stmt)) {
-        if((1U == callExpr->getNumArgs()) and IsCallToNamedFunction(*callExpr, "identifier_of")) {
-            if(const auto name = TryGetReflectedIdentifierName(callExpr->getArg(0)); name) {
-                return false;
+        if(1U == callExpr->getNumArgs()) {
+            if(const auto name = TryGetMetafunctionName(*callExpr); name and
+               (MetafunctionBehavior::NameLike == GetMetafunctionBehavior(*name))) {
+                if(const auto foldedName = TryGetReflectedIdentifierName(callExpr->getArg(0)); foldedName) {
+                    return false;
+                }
             }
         }
     }
@@ -2524,6 +2974,27 @@ void CodeGenerator::InsertArg(const CXXReflectExpr* stmt)
 }
 //-----------------------------------------------------------------------------
 
+void CodeGenerator::InsertArg(const CXXMetafunctionExpr* stmt)
+{
+    mOutputFormatHelper.Append("__metafunction("sv, std::to_string(stmt->getMetaFnID()));
+
+    unsigned argStart{};
+    if((0U < stmt->getNumArgs()) and isa<IntegerLiteral>(stmt->getArg(0))) {
+        if(const auto* literal = dyn_cast<IntegerLiteral>(stmt->getArg(0));
+           literal->getValue().getLimitedValue() == stmt->getMetaFnID()) {
+            argStart = 1U;
+        }
+    }
+
+    for(unsigned i{argStart}; i < stmt->getNumArgs(); ++i) {
+        mOutputFormatHelper.Append(", "sv);
+        InsertArg(stmt->getArg(i));
+    }
+
+    mOutputFormatHelper.Append(")");
+}
+//-----------------------------------------------------------------------------
+
 void CodeGenerator::InsertArg(const CXXSpliceExpr* stmt)
 {
     if(const auto* splice = stmt->getSplice()) {
@@ -3016,27 +3487,21 @@ void CodeGenerator::InsertArg(const OpaqueValueExpr* stmt)
 void CodeGenerator::InsertArg(const CallExpr* stmt)
 {
     if(1U == stmt->getNumArgs()) {
-        const bool isIdentifierOfCall{[&] {
-            if(const auto* namedDecl = dyn_cast_or_null<NamedDecl>(stmt->getCalleeDecl())) {
-                return namedDecl->getName() == "identifier_of";
-            }
+        if(IsMetafunctionCall(*stmt)) {
+            if(const auto metafunctionName = TryGetMetafunctionName(*stmt); metafunctionName and
+           (MetafunctionBehavior::NameLike == GetMetafunctionBehavior(*metafunctionName))) {
+                const bool              useUtf8Prefix = metafunctionName->starts_with("u8");
+                const std::optional<std::string> name = (metafunctionName->find("display") != std::string::npos)
+                                                            ? TryGetReflectedDisplayName(stmt->getArg(0))
+                                                            : TryGetReflectedIdentifierName(stmt->getArg(0));
 
-            const auto* callee = stmt->getCallee()->IgnoreParenImpCasts();
-            if(const auto* declRef = dyn_cast_or_null<DeclRefExpr>(callee)) {
-                return declRef->getNameInfo().getAsString() == "identifier_of";
-            }
-
-            if(const auto* unresolved = dyn_cast_or_null<UnresolvedLookupExpr>(callee)) {
-                return unresolved->getName().getAsString() == "identifier_of";
-            }
-
-            return false;
-        }()};
-
-        if(isIdentifierOfCall) {
-            if(const auto name = TryGetReflectedIdentifierName(stmt->getArg(0)); name) {
-                mOutputFormatHelper.Append("\""sv, *name, "\""sv);
-                return;
+                if(name) {
+                    if(useUtf8Prefix) {
+                        mOutputFormatHelper.Append("u8");
+                    }
+                    mOutputFormatHelper.Append("\""sv, *name, "\""sv);
+                    return;
+                }
             }
         }
     }

@@ -1,0 +1,204 @@
+template<class type_parameter_0_0>
+inline consteval auto remove_const(type_parameter_0_0 value)
+{
+  return static_cast<type_parameter_0_0 &&>(value);
+}
+
+#ifdef INSIGHTS_USE_TEMPLATE
+template<>
+inline consteval meta::info remove_const<meta::info>(meta::info value)
+{
+  return static_cast<meta::info &&>(value);
+}
+#endif
+
+
+template<class type_parameter_0_0>
+inline consteval auto add_pointer(type_parameter_0_0 value)
+{
+  return static_cast<type_parameter_0_0 &&>(value);
+}
+
+#ifdef INSIGHTS_USE_TEMPLATE
+template<>
+inline consteval meta::info add_pointer<meta::info>(meta::info value)
+{
+  return static_cast<meta::info &&>(value);
+}
+#endif
+
+
+template<class type_parameter_0_0>
+inline consteval auto remove_reference(type_parameter_0_0 value)
+{
+  return static_cast<type_parameter_0_0 &&>(value);
+}
+
+#ifdef INSIGHTS_USE_TEMPLATE
+template<>
+inline consteval meta::info remove_reference<meta::info>(meta::info value)
+{
+  return static_cast<meta::info &&>(value);
+}
+#endif
+
+
+template<class type_parameter_0_0>
+inline consteval auto decay(type_parameter_0_0 value)
+{
+  return static_cast<type_parameter_0_0 &&>(value);
+}
+
+#ifdef INSIGHTS_USE_TEMPLATE
+template<>
+inline consteval meta::info decay<meta::info>(meta::info value)
+{
+  return static_cast<meta::info &&>(value);
+}
+#endif
+
+
+template<class type_parameter_0_0>
+inline consteval auto underlying_type(type_parameter_0_0 value)
+{
+  return static_cast<type_parameter_0_0 &&>(value);
+}
+
+#ifdef INSIGHTS_USE_TEMPLATE
+template<>
+inline consteval meta::info underlying_type<meta::info>(meta::info value)
+{
+  return static_cast<meta::info &&>(value);
+}
+#endif
+
+
+template<class type_parameter_0_0>
+inline consteval unsigned long rank(type_parameter_0_0)
+{
+  return 2;
+}
+
+/* First instantiated from: MetaTransformsTest.cpp:86 */
+#ifdef INSIGHTS_USE_TEMPLATE
+template<>
+inline consteval unsigned long rank<meta::info>(meta::info)
+{
+  return 2;
+}
+#endif
+
+
+template<class type_parameter_0_0>
+inline consteval unsigned long extent(type_parameter_0_0, unsigned int)
+{
+  return 3;
+}
+
+/* First instantiated from: MetaTransformsTest.cpp:91 */
+#ifdef INSIGHTS_USE_TEMPLATE
+template<>
+inline consteval unsigned long extent<meta::info>(meta::info, unsigned int)
+{
+  return 3;
+}
+#endif
+
+
+template<class type_parameter_0_0>
+inline consteval unsigned long size_of(type_parameter_0_0)
+{
+  return 4;
+}
+
+/* First instantiated from: MetaTransformsTest.cpp:101 */
+#ifdef INSIGHTS_USE_TEMPLATE
+template<>
+inline consteval unsigned long size_of<meta::info>(meta::info)
+{
+  return 4;
+}
+#endif
+
+
+template<class type_parameter_0_0>
+inline consteval unsigned long alignment_of(type_parameter_0_0)
+{
+  return 4;
+}
+
+/* First instantiated from: MetaTransformsTest.cpp:106 */
+#ifdef INSIGHTS_USE_TEMPLATE
+template<>
+inline consteval unsigned long alignment_of<meta::info>(meta::info)
+{
+  return 4;
+}
+#endif
+
+
+enum class Color : unsigned int
+{
+  red
+};
+
+
+inline consteval int stripped()
+{
+  static_cast<void>(remove_const(^^const int));
+  return 0;
+}
+
+inline consteval int pointed()
+{
+  static_cast<void>(add_pointer(^^int));
+  return 0;
+}
+
+inline consteval int unref()
+{
+  static_cast<void>(remove_reference(^^int &));
+  return 0;
+}
+
+inline consteval int decayed()
+{
+  static_cast<void>(decay(^^int[3]));
+  return 0;
+}
+
+inline consteval int underlying()
+{
+  static_cast<void>(underlying_type(^^Color));
+  return 0;
+}
+
+inline consteval unsigned long array_rank()
+{
+  return rank(^^int[2][3]);
+}
+
+inline consteval unsigned long first_extent()
+{
+  return extent(^^int[2][3], 0);
+}
+
+inline consteval unsigned long second_extent()
+{
+  return extent(^^int[2][3], 1);
+}
+
+inline consteval unsigned long int_size()
+{
+  return size_of(^^int);
+}
+
+inline consteval unsigned long int_alignment()
+{
+  return alignment_of(^^int);
+}
+
+int main()
+{
+  return static_cast<int>((((((static_cast<unsigned long>((((stripped() + pointed()) + unref()) + decayed()) + underlying())) + array_rank()) + first_extent()) + second_extent()) + int_size()) + int_alignment());
+}
